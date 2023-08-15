@@ -9,6 +9,7 @@ import os
 
 from .standards import *
 from .prep_data import prep_raw_mvt
+from .config import Config
 
 # LINE_PROFILER
 # import line_profiler
@@ -23,29 +24,17 @@ def save_db(df_mvt, db_filename):
     df_mvt.to_pickle(db_filename)
 
 
-def raw_scan_process(foldername, db_name, prefix_input_files='', save_mvts=False, one_db=True):
+def scan_new_input(foldername, db_name, prefix_input_files='', save_mvts=False, one_db=True):
     import pickle
-    
-    db_files_processed = os.path.join(_DB_DIR_, db_name, _FILENAME_MVT_FILES_PROCESSED_)
-    
-    if os.path.isfile(db_files_processed):
-        with open(db_files_processed, 'rb') as f:
-            raw_files_processed = pickle.load(f)
-    else:
-        raw_files_processed = set()
-    
-    all_raw_files = {filename for filename in os.listdir(foldername) if filename.startswith(prefix_input_files)}
-    unprocessed_raw_files = sorted(all_raw_files.difference(raw_files_processed))
 
+    config = Config(db_name, _DB_DIR_)
+    unprocessed_raw_files = config.find_unprocessed_files(foldername, prefix_input_files)
     print(f'Detected {len(unprocessed_raw_files)} file(s) not processed.\n')
 
     tracked = None
-    for file in unprocessed_raw_files:
-        tracked = process_mvt_file(os.path.join(foldername, file), db_name, save_mvts, one_db)
-        raw_files_processed.add(file)
-
-    with open(db_files_processed, 'wb') as f:
-        pickle.dump(raw_files_processed, f)
+    for filename in unprocessed_raw_files:
+        tracked = process_mvt_file(os.path.join(foldername, filename), db_name, save_mvts, one_db)
+        config.record_inputfile_processed(filename)
 
     return tracked
 

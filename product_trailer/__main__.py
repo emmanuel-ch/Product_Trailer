@@ -22,13 +22,13 @@ def main():
     print('\n\n', ' PRODUCT-TRAILER '.center(80, '#'), sep='')
 
     # Process files
-    tracked = utils.raw_scan_process(args.raw_dir, 
-                                     args.db_name, 
-                                     prefix_input_files = args.raw_prefix, 
-                                     save_mvts = args.save_mvt, 
-                                     one_db = not args.keep_old_db)
+    tracked = utils.scan_new_input(args.raw_dir,
+                                   args.db_name,
+                                   prefix_input_files = args.raw_prefix,
+                                   save_mvts = args.save_mvt,
+                                   one_db = not args.keep_old_db)
     
-    # Save to excel
+    # Post-processing
     if not args.no_excel_report:
         print('Post-processing...')
 
