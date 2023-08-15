@@ -30,24 +30,19 @@ def scan_new_input(foldername, config, prefix_input_files=''):
 
 
 def process_mvt_file(filepath, config):
-    
     print(f"/n##### Process new movements: {filepath}")
     
-    
     # ############################## PART 1 ##############################
-    print('Reading new movement data... ', end='')
+    print('Reading input movement data... ', end='')
     new_raw_mvt = prep_raw_mvt(filepath)
-    print('Preparing it... ', end='')
     MVT_DB = prep_mvt_tracking_db(new_raw_mvt)
     max_MVT_date = MVT_DB['Posting Date'].max().strftime("%Y-%m-%d")
-    print(f'Done {MVT_DB.shape}')
+    print(f'{MVT_DB.shape[0]} rows... Done')
 
-    # Prepare the database of products that will be trailed
     # BUG TO CORRECT: Do NOT open a DB which already contains the Items we want to track
     print('Preparing items database... ', end='')
     new_tracked_items = extract_items(new_raw_mvt)
     saved_items = config.fetch_saved_items()
-
     if isinstance(saved_items, pd.DataFrame):
         tracked_items = pd.concat([saved_items, new_tracked_items])
         print(f'{saved_items.shape[0]} saved + {new_tracked_items.shape[0]} new = Total {tracked_items.shape[0]}')
@@ -68,14 +63,12 @@ def process_mvt_file(filepath, config):
         .to_list()
     )  # 1 task = 1 SKU
     
-    mvt_rm_columns = ['Country', 'Special Stock Ind Code', 'Material Type Code', 'Brand', 'Category']
-    MVT_DB = MVT_DB.drop(columns=mvt_rm_columns)
     MVT_DB = MVT_DB.loc[MVT_DB['SKU'].isin(tasks_queue)].sort_values(by='Posting Date', ascending=True) # Select the combinations which are interesting
     list_computed_MVTS = [] # Empty list for now
     print('Done.')
 
     # Looping through the tasks
-    for task in (pbar := tqdm.tqdm(tasks_queue, desc='Crunching data... ')):
+    for task in (pbar := tqdm.tqdm(tasks_queue, desc='Crunching... ')):
         pbar.set_postfix({'SKU': task}, refresh=False)
 
         out_items, out_MVTs = process_task(task, Items_open, MVT_DB)
@@ -85,20 +78,21 @@ def process_mvt_file(filepath, config):
     
     tracked_items = pd.concat(list_computed_items, axis=0)
     
-
     # ############################## PART 3 ##############################
     print('Saving...', end='')
     date_range_db = tracked_items['Return_Date'].min().strftime("%Y-%m-%d") + "..." + max_MVT_date
     config.save_items(tracked_items, date_range_db)
     config.save_movements(list_computed_MVTS, date_range_db)
     print(f'Done. Input file successfully processed.')
+
     # profiler.print_stats()  # LINE_PROFILER
     return True
 
 
-def prep_mvt_tracking_db(new_raw_mvt=None):
-    import pandas as pd
+def prep_mvt_tracking_db(new_raw_mvt):
     new_mvts = new_raw_mvt[_MVT_DB_COLUMNS_].copy()
+    mvt_rm_columns = ['Country', 'Special Stock Ind Code', 'Material Type Code', 'Brand', 'Category']
+    new_mvts = new_mvts.drop(columns=mvt_rm_columns)
     new_mvts['QTY_Unallocated'] = new_mvts['QTY'].apply(lambda qty: max(qty, -qty))
     new_mvts['Items_Allocated'] = new_mvts.apply(lambda r: [], result_type='reduce', axis=1)
     return new_mvts
@@ -157,6 +151,23 @@ def extract_items(raw_mvt):
         }, inplace=True)
 
     return tp_final
+
+
+#@profiler
+def process_task(task, Items_open, MVT_DB):
+    task_items = Items_open.loc[(Items_open['SKU'] == task)].copy()
+    task_MVTs = MVT_DB.loc[(MVT_DB['SKU'] == task)].copy()
+
+    if len(task_MVTs) == 0:  # No mvt => Skip this
+        return task_items, task_MVTs
+
+    for ID in task_items.index:  # Do the work on task_item and task_MVTs ...
+        hop_again = True
+        while hop_again:
+            hop_again, task_MVTs, task_items = next_hop(ID, task_MVTs, task_items)
+    
+    return task_items, task_MVTs
+
 
 # @profiler  # LINE_PROFILER
 def next_hop(ID, MVT_DB, tracked_items):
@@ -327,20 +338,4 @@ def next_hop(ID, MVT_DB, tracked_items):
     
     tracked_items.loc[ID, 'Waypoints'].append(new_wpt)
     return (True, MVT_DB, tracked_items)
-
-
-#@profiler
-def process_task(task, Items_open, MVT_DB):
-    task_items = Items_open.loc[(Items_open['SKU'] == task)].copy()
-    task_MVTs = MVT_DB.loc[(MVT_DB['SKU'] == task)].copy()
-
-    if len(task_MVTs) == 0:  # No mvt => Skip this
-        return task_items, task_MVTs
-
-    for ID in task_items.index:  # Do the work on task_item and task_MVTs ...
-        hop_again = True
-        while hop_again:
-            hop_again, task_MVTs, task_items = next_hop(ID, task_MVTs, task_items)
-    
-    return task_items, task_MVTs
 
