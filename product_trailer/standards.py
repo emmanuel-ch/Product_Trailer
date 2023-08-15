@@ -14,9 +14,6 @@ _DB_DIR_ = 'databases/'
 _REPORTS_DIR_ = 'reports_out/'
 _POSTPROCESSING_DIR_ = 'post_processing/'
 
-_MVT_DB_PREFIX_ = 'All movements _'
-_TRACKED_ITEMS_DB_PREFIX_ = 'Tracked _'  # To be removed because exists in the config class
-
 
 __all__ = ['_ID_SPECS_',
            '_WAYPOINTS_DEF_',
@@ -25,6 +22,4 @@ __all__ = ['_ID_SPECS_',
            '_RAW_DIR_',
            '_DB_DIR_',
            '_REPORTS_DIR_',
-           '_POSTPROCESSING_DIR_',
-           '_MVT_DB_PREFIX_',
-           '_TRACKED_ITEMS_DB_PREFIX_']
+           '_POSTPROCESSING_DIR_']

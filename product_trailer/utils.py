@@ -4,47 +4,34 @@
 import pandas as pd
 import numpy as np
 import tqdm
-from datetime import datetime
 import os
 
 from .standards import *
 from .prep_data import prep_raw_mvt
-from .config import Config
 
 # LINE_PROFILER
 # import line_profiler
 # profiler = line_profiler.LineProfiler()
 
 
-def open_db(db_filename=False):
-    import pandas as pd
-    return pd.read_pickle(db_filename)
-
-def save_db(df_mvt, db_filename):
-    df_mvt.to_pickle(db_filename)
-
-
-def scan_new_input(foldername, db_name, prefix_input_files='', save_mvts=False, one_db=True):
+def scan_new_input(foldername, config, prefix_input_files=''):
     import pickle
 
-    config = Config(db_name, _DB_DIR_)
+    
     unprocessed_raw_files = config.find_unprocessed_files(foldername, prefix_input_files)
     print(f'Detected {len(unprocessed_raw_files)} file(s) not processed.\n')
 
     tracked = None
     for filename in unprocessed_raw_files:
-        tracked = process_mvt_file(os.path.join(foldername, filename), db_name, config, save_mvts, one_db)
+        tracked = process_mvt_file(os.path.join(foldername, filename), config)
         config.record_inputfile_processed(filename)
 
     return tracked
 
 
-def process_mvt_file(filepath, db_name, config, save_mvts=False, one_db=True):
+def process_mvt_file(filepath, config):
     
-    print(f"##### Process new movements: {filepath}")
-    
-    # ############################## PART 0 ##############################
-    db_path = os.path.join(_DB_DIR_, db_name)
+    print(f"/n##### Process new movements: {filepath}")
     
     
     # ############################## PART 1 ##############################
@@ -59,7 +46,7 @@ def process_mvt_file(filepath, db_name, config, save_mvts=False, one_db=True):
     # BUG TO CORRECT: Do NOT open a DB which already contains the Items we want to track
     print('Preparing items database... ', end='')
     new_tracked_items = extract_items(new_raw_mvt)
-    saved_items, prev_dbfilename_items = config.fetch_saved_items()
+    saved_items = config.fetch_saved_items()
 
     if isinstance(saved_items, pd.DataFrame):
         tracked_items = pd.concat([saved_items, new_tracked_items])
@@ -67,23 +54,6 @@ def process_mvt_file(filepath, db_name, config, save_mvts=False, one_db=True):
     else:
         tracked_items = new_tracked_items
         print(f'0 saved + {new_tracked_items.shape[0]} new = Total {tracked_items.shape[0]}')
-
-    # if os.path.isdir(db_path):
-    #     possible_db = [filename for filename in ['nope'] + os.listdir(db_path) if filename.startswith(_TRACKED_ITEMS_DB_PREFIX_)]
-    #     if len(possible_db) == 0:
-    #         print('New database... ', end='')
-    #         tracked_items = prep_trackedItems_db(None, new_tracked_items)
-    #         print(f'Done {tracked_items.shape}')
-    #         prev_dbfilename_items = ''
-    #     else:
-    #         db_trackedItems_filename = sorted(possible_db)[-1]
-    #         db_name_items = db_trackedItems_filename[max(0,db_trackedItems_filename.rfind('/')):]
-    #         print(f'Recovering DB: {db_name_items} ... ', end='')
-    #         prev_dbfilename_items = os.path.join(db_path, db_trackedItems_filename)
-    #         tracked_items = prep_trackedItems_db(open_db(prev_dbfilename_items), new_tracked_items)
-    #         print(f'Adding {new_tracked_items.shape[0]} records, total {tracked_items.shape[0]}. Done.')
-    # else:
-    #     return False
     
     # ############################## PART 2 ##############################
     print('Preparing for computation... ', end='')
@@ -110,7 +80,7 @@ def process_mvt_file(filepath, db_name, config, save_mvts=False, one_db=True):
 
         out_items, out_MVTs = process_task(task, Items_open, MVT_DB)
         list_computed_items.append(out_items)
-        if save_mvts:
+        if config.save_mvts:
             list_computed_MVTS.append(out_MVTs)
     
     tracked_items = pd.concat(list_computed_items, axis=0)
@@ -118,43 +88,12 @@ def process_mvt_file(filepath, db_name, config, save_mvts=False, one_db=True):
 
     # ############################## PART 3 ##############################
     print('Saving...', end='')
-    
     date_range_db = tracked_items['Return_Date'].min().strftime("%Y-%m-%d") + "..." + max_MVT_date
-    datetime_db_creation = datetime.today().strftime("%Y-%m-%d %Hh%M")
-    
-    if save_mvts: # Save MVT database if it's wanted
-        MVT_DB = pd.concat(list_computed_MVTS, axis=0)
-        possible_mvt_db = [filename for filename in ['nope'] + os.listdir(db_path) if filename.startswith(_MVT_DB_PREFIX_)]
-        if len(possible_mvt_db) == 0:
-            new_MVT_DB = MVT_DB
-            prev_dbfilename_MVTS = ''
-        else:
-            db_mvts_filename = sorted(possible_mvt_db)[-1]
-            prev_dbfilename_MVTS = os.path.join(db_path, db_mvts_filename)
-            MVT_DB_old = open_db(prev_dbfilename_MVTS)
-            new_MVT_DB = pd.concat([MVT_DB_old, MVT_DB], axis=0)
-        
-        new_db_mvt_filename = os.path.join(db_path, f'{_MVT_DB_PREFIX_} {date_range_db} (saved {datetime_db_creation}).pkl')
-        save_db(new_MVT_DB, new_db_mvt_filename)
-        
-        if one_db:
-            if prev_dbfilename_MVTS != '':
-                os.remove(prev_dbfilename_MVTS)
-        
-    else:
-        new_db_mvt_filename = '(Movements not saved)'
-    
-    # Save database of tracked products
-    new_db_items = os.path.join(db_path, f'{_TRACKED_ITEMS_DB_PREFIX_} {date_range_db} (saved {datetime_db_creation}).pkl')
-    save_db(tracked_items, new_db_items)
-    
-    if one_db:
-        if prev_dbfilename_items != '':
-            os.remove(prev_dbfilename_items)
-    
-    print(f'Done. Output files:\n  {new_db_mvt_filename}\n  {new_db_items}\nMain computation finished.')
+    config.save_items(tracked_items, date_range_db)
+    config.save_movements(list_computed_MVTS, date_range_db)
+    print(f'Done. Input file successfully processed.')
     # profiler.print_stats()  # LINE_PROFILER
-    return new_db_items
+    return True
 
 
 def prep_mvt_tracking_db(new_raw_mvt=None):

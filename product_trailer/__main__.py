@@ -6,6 +6,7 @@ from .standards import *
 def main():
     from . import utils
     from .standards import _RAW_DIR_
+    from .config import Config
 
     # Arg parser
     parser = argparse.ArgumentParser(
@@ -21,35 +22,27 @@ def main():
 
     print('\n\n', ' PRODUCT-TRAILER '.center(80, '#'), sep='')
 
+    # Configuration
+    config = Config(args.db_name, _DB_DIR_, not args.keep_old_db, args.save_mvt)
+
     # Process files
-    tracked = utils.scan_new_input(args.raw_dir,
-                                   args.db_name,
-                                   prefix_input_files = args.raw_prefix,
-                                   save_mvts = args.save_mvt,
-                                   one_db = not args.keep_old_db)
+    utils.scan_new_input(args.raw_dir,
+                         config,
+                         prefix_input_files = args.raw_prefix
+                         )
     
     # Post-processing
     if not args.no_excel_report:
-        print('Post-processing...')
+        from . import analysis_tk
+        print('\nPost-processing...')
 
-        if tracked is None:
-            db_path = os.path.join(_DB_DIR_, args.db_name)
-            possible_db = [filename for filename in ['nope'] + os.listdir(db_path) if filename.startswith(_TRACKED_ITEMS_DB_PREFIX_)]
-            if len(possible_db) == 0:
-                print(f'No DB exists')
-            else:
-                tracked = sorted(possible_db)[-1]
-                tracked = os.path.join(db_path, tracked)
-
-    
-    from . import analysis_tk
-    tracked_file = utils.open_db(tracked)
-    post_processed_analysis = analysis_tk.post_process(tracked_file)
-    report_filename = analysis_tk.save_report(post_processed_analysis, tab_with_waypoints=False)
-    print(f'Post-processed report saved: {report_filename}\n')
+        tracked_file = config.fetch_saved_items()
+        post_processed_analysis = analysis_tk.post_process(tracked_file)
+        report_filename = analysis_tk.save_report(post_processed_analysis, tab_with_waypoints=False)
+        print(f'Post-processed report saved: {report_filename}')
     
     # End of program
-    print(' Program finished '.center(80, '#'), end='\n\n\n')
+    print('\n' + ' Program finished '.center(80, '#'), end='\n\n\n')
 
 
 if __name__ == '__main__':
