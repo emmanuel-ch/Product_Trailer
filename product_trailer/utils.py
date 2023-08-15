@@ -33,10 +33,128 @@ def scan_new_input(foldername, db_name, prefix_input_files='', save_mvts=False, 
 
     tracked = None
     for filename in unprocessed_raw_files:
-        tracked = process_mvt_file(os.path.join(foldername, filename), db_name, save_mvts, one_db)
+        tracked = process_mvt_file(os.path.join(foldername, filename), db_name, config, save_mvts, one_db)
         config.record_inputfile_processed(filename)
 
     return tracked
+
+
+def process_mvt_file(filepath, db_name, config, save_mvts=False, one_db=True):
+    
+    print(f"##### Process new movements: {filepath}")
+    
+    # ############################## PART 0 ##############################
+    db_path = os.path.join(_DB_DIR_, db_name)
+    
+    
+    # ############################## PART 1 ##############################
+    print('Reading new movement data... ', end='')
+    new_raw_mvt = prep_raw_mvt(filepath)
+    print('Preparing it... ', end='')
+    MVT_DB = prep_mvt_tracking_db(new_raw_mvt)
+    max_MVT_date = MVT_DB['Posting Date'].max().strftime("%Y-%m-%d")
+    print(f'Done {MVT_DB.shape}')
+
+    # Prepare the database of products that will be trailed
+    # BUG TO CORRECT: Do NOT open a DB which already contains the Items we want to track
+    print('Preparing items database... ', end='')
+    new_tracked_items = extract_items(new_raw_mvt)
+    saved_items, prev_dbfilename_items = config.fetch_saved_items()
+
+    if isinstance(saved_items, pd.DataFrame):
+        tracked_items = pd.concat([saved_items, new_tracked_items])
+        print(f'{saved_items.shape[0]} saved + {new_tracked_items.shape[0]} new = Total {tracked_items.shape[0]}')
+    else:
+        tracked_items = new_tracked_items
+        print(f'0 saved + {new_tracked_items.shape[0]} new = Total {tracked_items.shape[0]}')
+
+    # if os.path.isdir(db_path):
+    #     possible_db = [filename for filename in ['nope'] + os.listdir(db_path) if filename.startswith(_TRACKED_ITEMS_DB_PREFIX_)]
+    #     if len(possible_db) == 0:
+    #         print('New database... ', end='')
+    #         tracked_items = prep_trackedItems_db(None, new_tracked_items)
+    #         print(f'Done {tracked_items.shape}')
+    #         prev_dbfilename_items = ''
+    #     else:
+    #         db_trackedItems_filename = sorted(possible_db)[-1]
+    #         db_name_items = db_trackedItems_filename[max(0,db_trackedItems_filename.rfind('/')):]
+    #         print(f'Recovering DB: {db_name_items} ... ', end='')
+    #         prev_dbfilename_items = os.path.join(db_path, db_trackedItems_filename)
+    #         tracked_items = prep_trackedItems_db(open_db(prev_dbfilename_items), new_tracked_items)
+    #         print(f'Adding {new_tracked_items.shape[0]} records, total {tracked_items.shape[0]}. Done.')
+    # else:
+    #     return False
+    
+    # ############################## PART 2 ##############################
+    print('Preparing for computation... ', end='')
+    Items_open = tracked_items.loc[tracked_items['Open'].fillna(True)].copy()
+    list_computed_items = [tracked_items.loc[~tracked_items['Open'].fillna(True)].copy()] # List of df for Items which are closed. Will be toped up with the ones we will work on.
+    
+    tasks_queue = (
+        Items_open
+        .value_counts(['SKU'])
+        .loc[Items_open.value_counts(['SKU']).gt(0)]
+        .reset_index()['SKU']
+        .to_list()
+    )  # 1 task = 1 SKU
+    
+    mvt_rm_columns = ['Country', 'Special Stock Ind Code', 'Material Type Code', 'Brand', 'Category']
+    MVT_DB = MVT_DB.drop(columns=mvt_rm_columns)
+    MVT_DB = MVT_DB.loc[MVT_DB['SKU'].isin(tasks_queue)].sort_values(by='Posting Date', ascending=True) # Select the combinations which are interesting
+    list_computed_MVTS = [] # Empty list for now
+    print('Done.')
+
+    # Looping through the tasks
+    for task in (pbar := tqdm.tqdm(tasks_queue, desc='Crunching data... ')):
+        pbar.set_postfix({'SKU': task}, refresh=False)
+
+        out_items, out_MVTs = process_task(task, Items_open, MVT_DB)
+        list_computed_items.append(out_items)
+        if save_mvts:
+            list_computed_MVTS.append(out_MVTs)
+    
+    tracked_items = pd.concat(list_computed_items, axis=0)
+    
+
+    # ############################## PART 3 ##############################
+    print('Saving...', end='')
+    
+    date_range_db = tracked_items['Return_Date'].min().strftime("%Y-%m-%d") + "..." + max_MVT_date
+    datetime_db_creation = datetime.today().strftime("%Y-%m-%d %Hh%M")
+    
+    if save_mvts: # Save MVT database if it's wanted
+        MVT_DB = pd.concat(list_computed_MVTS, axis=0)
+        possible_mvt_db = [filename for filename in ['nope'] + os.listdir(db_path) if filename.startswith(_MVT_DB_PREFIX_)]
+        if len(possible_mvt_db) == 0:
+            new_MVT_DB = MVT_DB
+            prev_dbfilename_MVTS = ''
+        else:
+            db_mvts_filename = sorted(possible_mvt_db)[-1]
+            prev_dbfilename_MVTS = os.path.join(db_path, db_mvts_filename)
+            MVT_DB_old = open_db(prev_dbfilename_MVTS)
+            new_MVT_DB = pd.concat([MVT_DB_old, MVT_DB], axis=0)
+        
+        new_db_mvt_filename = os.path.join(db_path, f'{_MVT_DB_PREFIX_} {date_range_db} (saved {datetime_db_creation}).pkl')
+        save_db(new_MVT_DB, new_db_mvt_filename)
+        
+        if one_db:
+            if prev_dbfilename_MVTS != '':
+                os.remove(prev_dbfilename_MVTS)
+        
+    else:
+        new_db_mvt_filename = '(Movements not saved)'
+    
+    # Save database of tracked products
+    new_db_items = os.path.join(db_path, f'{_TRACKED_ITEMS_DB_PREFIX_} {date_range_db} (saved {datetime_db_creation}).pkl')
+    save_db(tracked_items, new_db_items)
+    
+    if one_db:
+        if prev_dbfilename_items != '':
+            os.remove(prev_dbfilename_items)
+    
+    print(f'Done. Output files:\n  {new_db_mvt_filename}\n  {new_db_items}\nMain computation finished.')
+    # profiler.print_stats()  # LINE_PROFILER
+    return new_db_items
 
 
 def prep_mvt_tracking_db(new_raw_mvt=None):
@@ -45,16 +163,6 @@ def prep_mvt_tracking_db(new_raw_mvt=None):
     new_mvts['QTY_Unallocated'] = new_mvts['QTY'].apply(lambda qty: max(qty, -qty))
     new_mvts['Items_Allocated'] = new_mvts.apply(lambda r: [], result_type='reduce', axis=1)
     return new_mvts
-
-
-def prep_trackedItems_db(df_tracked_items=None, new_tracked_items=None):
-    import pandas as pd
-    list_df = []
-    if isinstance(df_tracked_items, pd.DataFrame):
-        list_df.append(df_tracked_items)
-    if isinstance(new_tracked_items, pd.DataFrame):
-        list_df.append(new_tracked_items)
-    return pd.concat(list_df)
 
 
 def extract_items(raw_mvt):
@@ -296,120 +404,4 @@ def process_task(task, Items_open, MVT_DB):
             hop_again, task_MVTs, task_items = next_hop(ID, task_MVTs, task_items)
     
     return task_items, task_MVTs
-
-
-def process_mvt_file(filepath, db_name, save_mvts=False, one_db=True):
-    
-    print(f"""########## Process new movements ##########
- - Movement file: {filepath}
- - DB name: {db_name} (Will be created if it doesn't exist)""")
-    
-    # ############################## PART 0 ##############################
-    db_path = os.path.join(_DB_DIR_, db_name)
-    
-    
-    # ############################## PART 1 ##############################
-    print('Reading new movement data... ', end='')
-    new_raw_mvt = prep_raw_mvt(filepath)
-    print('Preparing it... ', end='')
-    MVT_DB = prep_mvt_tracking_db(new_raw_mvt)
-    max_MVT_date = MVT_DB['Posting Date'].max().strftime("%Y-%m-%d")
-    print(f'Done {MVT_DB.shape}')
-
-    # Prepare the database of products that will be trailed
-    # BUG TO CORRECT: Do NOT open a DB which already contains the Items we want to track
-    print('Preparing product tracking database... ', end='')
-    new_tracked_items = extract_items(new_raw_mvt)
-    
-    
-    if not os.path.isdir(db_path):
-        os.makedirs(db_path)
-    
-    if os.path.isdir(db_path):
-        possible_db = [filename for filename in ['nope'] + os.listdir(db_path) if filename.startswith(_TRACKED_ITEMS_DB_PREFIX_)]
-        if len(possible_db) == 0:
-            print('New database... ', end='')
-            tracked_items = prep_trackedItems_db(None, new_tracked_items)
-            print(f'Done {tracked_items.shape}')
-            prev_dbfilename_items = ''
-        else:
-            db_trackedItems_filename = sorted(possible_db)[-1]
-            db_name_items = db_trackedItems_filename[max(0,db_trackedItems_filename.rfind('/')):]
-            print(f'Recovering DB: {db_name_items} ... ', end='')
-            prev_dbfilename_items = os.path.join(db_path, db_trackedItems_filename)
-            tracked_items = prep_trackedItems_db(open_db(prev_dbfilename_items), new_tracked_items)
-            print(f'Adding {new_tracked_items.shape[0]} records, total {tracked_items.shape[0]}. Done.')
-    else:
-        return False
-    
-    # ############################## PART 2 ##############################
-    print('Preparing for computation... ', end='')
-    Items_open = tracked_items.loc[tracked_items['Open'].fillna(True)].copy()
-    list_computed_items = [tracked_items.loc[~tracked_items['Open'].fillna(True)].copy()] # List of df for Items which are closed. Will be toped up with the ones we will work on.
-    
-    tasks_queue = (
-        Items_open
-        .value_counts(['SKU'])
-        .loc[Items_open.value_counts(['SKU']).gt(0)]
-        .reset_index()['SKU']
-        .to_list()
-    )  # 1 task = 1 SKU
-    
-    mvt_rm_columns = ['Country', 'Special Stock Ind Code', 'Material Type Code', 'Brand', 'Category']
-    MVT_DB = MVT_DB.drop(columns=mvt_rm_columns)
-    MVT_DB = MVT_DB.loc[MVT_DB['SKU'].isin(tasks_queue)].sort_values(by='Posting Date', ascending=True) # Select the combinations which are interesting
-    list_computed_MVTS = [] # Empty list for now
-    print('Done.')
-
-    # Looping through the tasks
-    for task in (pbar := tqdm.tqdm(tasks_queue, desc='Crunching data... ')):
-        pbar.set_postfix({'SKU': task}, refresh=False)
-
-        out_items, out_MVTs = process_task(task, Items_open, MVT_DB)
-        list_computed_items.append(out_items)
-        if save_mvts:
-            list_computed_MVTS.append(out_MVTs)
-    
-    tracked_items = pd.concat(list_computed_items, axis=0)
-    
-
-    # ############################## PART 3 ##############################
-    print('Saving...', end='')
-    
-    date_range_db = tracked_items['Return_Date'].min().strftime("%Y-%m-%d") + "..." + max_MVT_date
-    datetime_db_creation = datetime.today().strftime("%Y-%m-%d %Hh%M")
-    
-    if save_mvts: # Save MVT database if it's wanted
-        MVT_DB = pd.concat(list_computed_MVTS, axis=0)
-        possible_mvt_db = [filename for filename in ['nope'] + os.listdir(db_path) if filename.startswith(_MVT_DB_PREFIX_)]
-        if len(possible_mvt_db) == 0:
-            new_MVT_DB = MVT_DB
-            prev_dbfilename_MVTS = ''
-        else:
-            db_mvts_filename = sorted(possible_mvt_db)[-1]
-            prev_dbfilename_MVTS = os.path.join(db_path, db_mvts_filename)
-            MVT_DB_old = open_db(prev_dbfilename_MVTS)
-            new_MVT_DB = pd.concat([MVT_DB_old, MVT_DB], axis=0)
-        
-        new_db_mvt_filename = os.path.join(db_path, f'{_MVT_DB_PREFIX_} {date_range_db} (saved {datetime_db_creation}).pkl')
-        save_db(new_MVT_DB, new_db_mvt_filename)
-        
-        if one_db:
-            if prev_dbfilename_MVTS != '':
-                os.remove(prev_dbfilename_MVTS)
-        
-    else:
-        new_db_mvt_filename = '(Movements not saved)'
-    
-    # Save database of tracked products
-    new_db_items = os.path.join(db_path, f'{_TRACKED_ITEMS_DB_PREFIX_} {date_range_db} (saved {datetime_db_creation}).pkl')
-    save_db(tracked_items, new_db_items)
-    
-    if one_db:
-        if prev_dbfilename_items != '':
-            os.remove(prev_dbfilename_items)
-    
-    print(f'Done. Output files:\n  {new_db_mvt_filename}\n  {new_db_items}\nMain computation finished.')
-    # profiler.print_stats()  # LINE_PROFILER
-    return new_db_items
 
