@@ -30,7 +30,7 @@ def scan_new_input(foldername, config, prefix_input_files=''):
 
 
 def process_mvt_file(filepath, config):
-    print(f"/n##### Process new movements: {filepath}")
+    print(f"\n##### Process new movements: {filepath}")
     
     # ############################## PART 1 ##############################
     print('Reading input movement data... ', end='')
@@ -99,8 +99,6 @@ def prep_mvt_tracking_db(new_raw_mvt):
 
 
 def extract_items(raw_mvt):
-    
-    # 1: Select the returns and prep data
     trailed_products = raw_mvt.loc[(raw_mvt['Mvt Code'].isin(_RETURN_CODES_)) \
                              & (raw_mvt['Special Stock Ind Code'] == 'K') \
                              & (raw_mvt['Material Type Code'] == 'FERT')].copy()
@@ -108,49 +106,28 @@ def extract_items(raw_mvt):
                                + trailed_products['Sold to'].astype(str).str[4:11] + '/' + trailed_products['Posting Date'].astype(str) + '_' \
                                + trailed_products['SKU'].astype('str') + ':' + trailed_products['Batch'].astype('str')
     trailed_products['NbLines'] = (-trailed_products['QTY']).apply(np.floor).astype(int)
-
-    # 2: Make it granular - 1 line = 1 EA
-    tp_granular = trailed_products \
-        .pivot_table(index=['ID_temp', 'Mvt Code'], values='QTY', aggfunc=np.sum) \
-        .reset_index() \
-        .merge(
-            trailed_products[['ID_temp', *_ID_SPECS_, 'Standard Price']] \
-                .drop_duplicates(subset=['ID_temp', 'Mvt Code']), \
-            on=['ID_temp', 'Mvt Code'],
-            how='left') \
-        .assign(NbLines = lambda row: np.floor(-row['QTY']).astype(int)) \
-        .sort_values(by='ID_temp')
     
-    # 3: Multiply the lines & give them a name
-    tp_final = tp_granular.loc[tp_granular.index.repeat(tp_granular['NbLines'])].copy().sort_values(by=['ID_temp']).reset_index()
+    tp2 = trailed_products.loc[trailed_products.index.repeat(trailed_products['NbLines'])].copy()
+    tp2['ID'] = tp2['ID_temp'] + ':' + (1 + tp2.groupby('ID_temp').cumcount()).astype(str)
     
-    global prev_
-    prev_ = ['none', 0] # Previous ID, ID line number
-    def generate_ID_LineQTY(row):
-        global prev_
-        this_line_ordinal = 1
-        if row['ID_temp'] == prev_[0]:
-            this_line_ordinal += prev_[1]
-        prev_ = [row['ID_temp'], this_line_ordinal]
-        return [row['ID_temp'] + ':' + str(this_line_ordinal), 1, row['Mvt Code']]
-    tp_final[['ID', 'QTY_Returned', 'Mvt Code']] = tp_final.apply(lambda r: generate_ID_LineQTY(r), axis=1, result_type ='expand')
-
-    # 4: Cleanup and add 1st waypoint
-    tp_final.set_index('ID', inplace=True)
-    tp_final['Open'] = True
-    tp_final['Waypoints'] = tp_final.apply(lambda row: [row[_WAYPOINTS_DEF_].to_list()], axis=1)
-    tp_final.drop(columns=['QTY', 'NbLines', 'ID_temp', 'index', 'Mvt Code'], inplace=True)
-    
-    tp_final.rename(columns={
+    tp2 = (
+        tp2[['ID', 'Posting Date', 'Company', 'Country', 'SLOC',
+                 'Sold to', 'Brand', 'Category', 'SKU', 'Batch', 'Standard Price']]
+        .set_index('ID')
+        .assign(QTY_Returned = 1)
+        .assign(Open = True)
+        .assign(Waypoints = tp2[_WAYPOINTS_DEF_].values.tolist())
+        .rename(columns={
             'Posting Date': 'Return_Date',
             'Country': 'First_Country',
             'Company': 'First_Company',
             'SLOC': 'First_SLOC',
             'Sold to': 'First_Soldto',
             'Batch': 'First_Batch'
-        }, inplace=True)
-
-    return tp_final
+        })
+    )
+    tp2['Waypoints'] = tp2['Waypoints'].apply(lambda wpts: [wpts])
+    return tp2
 
 
 #@profiler
