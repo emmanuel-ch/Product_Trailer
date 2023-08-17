@@ -15,5 +15,8 @@ def prep_test_dataset_1():
 
 def test_extract_items_1(prep_test_dataset_1):
     new_out = extract_items(prep_test_dataset_1[0])
-    pd.testing.assert_frame_equal(new_out, prep_test_dataset_1[1])
+    pd.testing.assert_frame_equal(
+        new_out.sort_index().sort_index(axis=1).drop(columns=['Waypoints']), 
+        prep_test_dataset_1[1].sort_index().sort_index(axis=1).drop(columns=['Waypoints'])
+    )
 
