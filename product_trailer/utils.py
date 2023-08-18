@@ -63,7 +63,7 @@ def process_mvt_file(filepath, config):
         .to_list()
     )  # 1 task = 1 SKU
     
-    MVT_DB = MVT_DB.loc[MVT_DB['SKU'].isin(tasks_queue)].sort_values(by='Posting Date', ascending=True) # Select the combinations which are interesting
+    MVT_DB = MVT_DB.loc[MVT_DB['SKU'].isin(tasks_queue)]  # Select the combinations which are interesting
     list_computed_MVTS = [] # Empty list for now
     print('Done.')
 
@@ -191,10 +191,10 @@ def next_hop(ID, MVT_DB, tracked_items):
     #
     plus1_lines = find_plus1_lines(minus1_line, MVT_DB)
 
-    # No 1st-pass result for a +1: we widen the search
-    if (len(plus1_lines) == 0) and (np.isnan(tracked_items.loc[ID, 'Open'])):  # Except if we were looking for 2nd half of PO but didn't find it
-        return (False, MVT_DB, tracked_items)
-    elif len(plus1_lines) == 0:
+    if len(plus1_lines) == 0:  # No 1st-pass result for a +1: we widen the search
+        if np.isnan(tracked_items.loc[ID, 'Open']):  # Except if we were looking for 2nd half of PO but didn't find it (maybe in next report?)
+            return (False, MVT_DB, tracked_items)
+        
         # Last chance to find a +1: let's remove the filter on batch#
         plus1_lines = find_plus1_lines_nobatch(MVT_DB, minus1_line)
       

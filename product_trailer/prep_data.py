@@ -40,4 +40,4 @@ def prep_raw_mvt(filepath):
         raw_mvt[col_name] = raw_mvt[col_name].cat.add_categories('NA')
         raw_mvt[col_name].fillna('NA', inplace=True)
 
-    return raw_mvt
+    return raw_mvt.sort_values(by=['Posting Date', 'QTY'], ascending=[True, False])
