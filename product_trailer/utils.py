@@ -168,136 +168,51 @@ def next_hop(ID, MVT_DB, tracked_items):
             'Mvt Code': 'PO'
         })
     else:
-        if not this_is_first_step:
-            if latest_wpt[2] == 'NA': # Add filter on SoldTo if SKU is in consignment
-                minus1_line = MVT_DB.loc[
-                    (MVT_DB['Posting Date'].values >= latest_wpt[0]) & \
-                    (MVT_DB['Company'].values == latest_wpt[1]) & \
-                    (MVT_DB['SLOC'].values == latest_wpt[2]) & \
-                    (MVT_DB['Sold to'].values == latest_wpt[3]) & \
-                    (MVT_DB['Batch'].values == latest_wpt[5]) & \
-                    (MVT_DB['Items_Allocated'].apply(lambda Item_Allocated: ID not in Item_Allocated)) & \
-                    (MVT_DB['QTY'].values <= -1) & \
-                    (MVT_DB['QTY_Unallocated'].values >= 1)
-                ]
-            else:
-                minus1_line = MVT_DB.loc[
-                    (MVT_DB['Posting Date'].values >= latest_wpt[0]) & \
-                    (MVT_DB['Company'].values == latest_wpt[1]) & \
-                    (MVT_DB['SLOC'].values == latest_wpt[2]) & \
-                    (MVT_DB['Batch'].values == latest_wpt[5]) & \
-                    (MVT_DB['Items_Allocated'].apply(lambda Item_Allocated: ID not in Item_Allocated)) & \
-                    (MVT_DB['QTY'].values <= -1) & \
-                    (MVT_DB['QTY_Unallocated'].values >= 1)
-                ]
-        else: # We're looking for the 1st movement of the tracked product
-            minus1_line = MVT_DB.loc[
-                (MVT_DB['Posting Date'].values == latest_wpt[0]) & \
-                (MVT_DB['Company'].values == latest_wpt[1]) & \
-                (MVT_DB['SLOC'].values == latest_wpt[2]) & \
-                (MVT_DB['Sold to'].values == latest_wpt[3]) & \
-                (MVT_DB['Batch'].values == latest_wpt[5]) & \
-                (MVT_DB['Mvt Code'].values == latest_wpt[4]) & \
-                (MVT_DB['QTY'].values <= -1) & \
-                (MVT_DB['QTY_Unallocated'].values >= 1)
-            ]
-        
-        # Nothing found: The product didn't move
-        if len(minus1_line) == 0:
+        minus1_lines = find_minus1_lines(this_is_first_step, latest_wpt, MVT_DB, ID)
+
+        if len(minus1_lines) == 0:  # Nothing found: The product didn't move
             return (False, MVT_DB, tracked_items)
         
-        minus1_line = minus1_line.iloc[0]  # In case multiple lines are found, we take the 1st one
+        minus1_line = minus1_lines.iloc[0]  # In case multiple lines are found, we take the 1st one
         minus1_line_idx = minus1_line.name
         
-        # Check if it's a re-return
+        # Check if it's a re-return (prevent double-counting the physical product, and having troubles later on)
         if (not this_is_first_step) and (minus1_line['Mvt Code'] in _RETURN_CODES_):
             new_wpt = [minus1_line['Posting Date'], minus1_line['Company'], f"RE-RETURNED", latest_wpt[3], minus1_line['Mvt Code'], latest_wpt[5]]
             tracked_items.loc[ID, 'Waypoints'].append(new_wpt)
             tracked_items.loc[ID, 'Open'] = False
             return (False, MVT_DB, tracked_items)
     
-    #
-    # 2: We have the -1, let's find the +1
-    # We start with the exceptions, and the general case is down
-    #
-    if minus1_line['Mvt Code'] == '956': # Change of SoldTo
-        plus1_line = MVT_DB.loc[
-            (MVT_DB['Posting Date'].values == minus1_line['Posting Date']) & \
-            (MVT_DB['Company'].values == minus1_line['Company']) & \
-            (MVT_DB['Mvt Code'].values == '955') & \
-            (MVT_DB['Batch'].values == minus1_line['Batch']) & \
-            (MVT_DB['QTY'].values >= 1) & \
-            (MVT_DB['QTY_Unallocated'].values >= 1)
-        ]
-    elif minus1_line['Mvt Code'] == '702': # Change of batch number. Product remains in same SLOC & SoldTo
-        plus1_line = MVT_DB.loc[
-            (MVT_DB['Posting Date'].values == minus1_line['Posting Date']) & \
-            (MVT_DB['Company'].values == minus1_line['Company']) & \
-            (MVT_DB['SLOC'].values == minus1_line['SLOC']) & \
-            (MVT_DB['Sold to'].values == minus1_line['Sold to']) & \
-            (MVT_DB['Mvt Code'].values == '701') & \
-            (MVT_DB['QTY'].values >= 1) & \
-            (MVT_DB['QTY_Unallocated'].values >= 1)
-        ]
-    elif minus1_line['PO'] != '-2': # If it's a PO, we don't check with the mvt codes
-        plus1_line = MVT_DB.loc[
-            (MVT_DB['Posting Date'].values >= minus1_line['Posting Date']) & \
-            (MVT_DB['Batch'].values == minus1_line['Batch']) & \
-            (MVT_DB['PO'].values == minus1_line['PO']) & \
-            (MVT_DB['QTY'].values >= 1) & \
-            (MVT_DB['QTY_Unallocated'].values >= 1)
-        ]
-    else:  # Standard mvt
-        plus1_line = MVT_DB.loc[
-            (MVT_DB['Posting Date'].values == minus1_line['Posting Date']) & \
-            (MVT_DB['Company'].values == minus1_line['Company']) & \
-            (MVT_DB['Sold to'].values == minus1_line['Sold to']) & \
-            (MVT_DB['Batch'].values == minus1_line['Batch']) & \
-            (MVT_DB['Mvt Code'].values == minus1_line['Mvt Code']) & \
-            (MVT_DB['Document'].values == minus1_line['Document']) & \
-            (MVT_DB['QTY'].values >= 1) & \
-            (MVT_DB['QTY_Unallocated'].values >= 1)
-        ]
-    
-    # No 1st-pass result for a +1: we widen the search
-    if (len(plus1_line) == 0) and (np.isnan(tracked_items.loc[ID, 'Open'])):  # Except if we were looking for 2nd half of PO but didn't find it
-        return (False, MVT_DB, tracked_items)
-    elif (len(plus1_line) == 0) and (not np.isnan(tracked_items.loc[ID, 'Open'])):
-        # Last chance to find a +1: let's remove the filter on batch#
-        plus1_line = MVT_DB.loc[
-            (MVT_DB['Posting Date'].values == minus1_line['Posting Date']) & \
-            (MVT_DB['Company'].values == minus1_line['Company']) & \
-            (MVT_DB['Sold to'].values == minus1_line['Sold to']) & \
-            (MVT_DB['Mvt Code'].values == minus1_line['Mvt Code']) & \
-            (MVT_DB['Document'].values == minus1_line['Document']) & \
-            (MVT_DB['QTY'].values >= 1) & \
-            (MVT_DB['QTY_Unallocated'].values >= 1)
-        ]
-
-        # Part is consumed, scrapped or has moved away from country
-        if len(plus1_line) == 0:
-            if minus1_line['PO'] != '-2':  # It's on a PO, so it's potentially somewhere in the network
-                new_wpt = [minus1_line['Posting Date'], minus1_line['Company'], f"PO FROM {minus1_line['SLOC']}, mvt {minus1_line['Mvt Code']}", minus1_line['Sold to'], minus1_line['PO'], minus1_line['Batch']]
-                tracked_items.loc[ID, 'Waypoints'].append(new_wpt)
-                tracked_items.loc[ID, 'Open'] = np.nan
-                MVT_DB.loc[minus1_line_idx, 'QTY_Unallocated'] -= 1
-                MVT_DB.loc[minus1_line_idx, 'Items_Allocated'].append(ID)
-                return (False, MVT_DB, tracked_items)
-            else:  # It's not on a PO, so it's been burnt
-                new_wpt = [minus1_line['Posting Date'], minus1_line['Company'], f"BURNT {minus1_line['SLOC']}", minus1_line['Sold to'], minus1_line['Mvt Code'], minus1_line['Batch']]
-                tracked_items.loc[ID, 'Waypoints'].append(new_wpt)
-                tracked_items.loc[ID, 'Open'] = False
-                MVT_DB.loc[minus1_line_idx, 'QTY_Unallocated'] -= 1
-                MVT_DB.loc[minus1_line_idx, 'Items_Allocated'].append(ID)
-                return (False, MVT_DB, tracked_items)
-
-    plus1_line = plus1_line.iloc[0]
-    plus1_line_idx = plus1_line.name
-
-    if not np.isnan(tracked_items.loc[ID, 'Open']):  # If it's not 2nd part of a PO
         MVT_DB.loc[minus1_line_idx, 'QTY_Unallocated'] -= 1
         MVT_DB.loc[minus1_line_idx, 'Items_Allocated'].append(ID)
-    else:  # If it's the 2nd half of a PO, then we set it back to Open
+    
+    #
+    # 2: We have the -1, let's find the +1
+    #
+    plus1_lines = find_plus1_lines(minus1_line, MVT_DB)
+
+    # No 1st-pass result for a +1: we widen the search
+    if (len(plus1_lines) == 0) and (np.isnan(tracked_items.loc[ID, 'Open'])):  # Except if we were looking for 2nd half of PO but didn't find it
+        return (False, MVT_DB, tracked_items)
+    elif len(plus1_lines) == 0:
+        # Last chance to find a +1: let's remove the filter on batch#
+        plus1_lines = find_plus1_lines_nobatch(MVT_DB, minus1_line)
+      
+        if len(plus1_lines) == 0:  # Part is burnt or is on a PO
+            if minus1_line['PO'] != '-2':  # It's on a PO, we put the item semi-open (np.nan)
+                new_wpt = [minus1_line['Posting Date'], minus1_line['Company'], f"PO FROM {minus1_line['SLOC']}, mvt {minus1_line['Mvt Code']}", minus1_line['Sold to'], minus1_line['PO'], minus1_line['Batch']]
+                tracked_items.loc[ID, 'Open'] = np.nan
+            else:  # It's not on a PO, so it's been burnt
+                new_wpt = [minus1_line['Posting Date'], minus1_line['Company'], f"BURNT {minus1_line['SLOC']}", minus1_line['Sold to'], minus1_line['Mvt Code'], minus1_line['Batch']]
+                tracked_items.loc[ID, 'Open'] = False
+            
+            tracked_items.loc[ID, 'Waypoints'].append(new_wpt)
+            return (False, MVT_DB, tracked_items)
+
+    plus1_line = plus1_lines.iloc[0]
+    plus1_line_idx = plus1_line.name
+
+    if np.isnan(tracked_items.loc[ID, 'Open']):  # If it's the 2nd half of a PO, then we set it back to Open
         tracked_items.loc[ID, 'Open'] = True
     
     MVT_DB.loc[plus1_line_idx, 'QTY_Unallocated'] -= 1
@@ -316,3 +231,95 @@ def next_hop(ID, MVT_DB, tracked_items):
     tracked_items.loc[ID, 'Waypoints'].append(new_wpt)
     return (True, MVT_DB, tracked_items)
 
+
+def find_minus1_lines(this_is_first_step, latest_wpt, MVT_DB, ID):
+    if not this_is_first_step:
+        if latest_wpt[2] == 'NA': # Add filter on SoldTo if SKU is in consignment
+            minus1_line = MVT_DB.loc[
+                (MVT_DB['Posting Date'].values >= latest_wpt[0]) & \
+                (MVT_DB['Company'].values == latest_wpt[1]) & \
+                (MVT_DB['SLOC'].values == latest_wpt[2]) & \
+                (MVT_DB['Sold to'].values == latest_wpt[3]) & \
+                (MVT_DB['Batch'].values == latest_wpt[5]) & \
+                (MVT_DB['Items_Allocated'].apply(lambda Item_Allocated: ID not in Item_Allocated)) & \
+                (MVT_DB['QTY'].values <= -1) & \
+                (MVT_DB['QTY_Unallocated'].values >= 1)
+            ]
+        else:
+            minus1_line = MVT_DB.loc[
+                (MVT_DB['Posting Date'].values >= latest_wpt[0]) & \
+                (MVT_DB['Company'].values == latest_wpt[1]) & \
+                (MVT_DB['SLOC'].values == latest_wpt[2]) & \
+                (MVT_DB['Batch'].values == latest_wpt[5]) & \
+                (MVT_DB['Items_Allocated'].apply(lambda Item_Allocated: ID not in Item_Allocated)) & \
+                (MVT_DB['QTY'].values <= -1) & \
+                (MVT_DB['QTY_Unallocated'].values >= 1)
+            ]
+    else: # We're looking for the 1st movement of the tracked product
+        minus1_line = MVT_DB.loc[
+            (MVT_DB['Posting Date'].values == latest_wpt[0]) & \
+            (MVT_DB['Company'].values == latest_wpt[1]) & \
+            (MVT_DB['SLOC'].values == latest_wpt[2]) & \
+            (MVT_DB['Sold to'].values == latest_wpt[3]) & \
+            (MVT_DB['Batch'].values == latest_wpt[5]) & \
+            (MVT_DB['Mvt Code'].values == latest_wpt[4]) & \
+            (MVT_DB['QTY'].values <= -1) & \
+            (MVT_DB['QTY_Unallocated'].values >= 1)
+        ]
+    return minus1_line
+
+
+def find_plus1_lines(minus1_line, MVT_DB):  # We start with the exceptions, and the general case is down
+    if minus1_line['Mvt Code'] == '956': # Change of SoldTo
+        plus1_lines = MVT_DB.loc[
+            (MVT_DB['Posting Date'].values == minus1_line['Posting Date']) & \
+            (MVT_DB['Company'].values == minus1_line['Company']) & \
+            (MVT_DB['Mvt Code'].values == '955') & \
+            (MVT_DB['Batch'].values == minus1_line['Batch']) & \
+            (MVT_DB['QTY'].values >= 1) & \
+            (MVT_DB['QTY_Unallocated'].values >= 1)
+        ]
+    elif minus1_line['Mvt Code'] == '702': # Change of batch number. Product remains in same SLOC & SoldTo
+        plus1_lines = MVT_DB.loc[
+            (MVT_DB['Posting Date'].values == minus1_line['Posting Date']) & \
+            (MVT_DB['Company'].values == minus1_line['Company']) & \
+            (MVT_DB['SLOC'].values == minus1_line['SLOC']) & \
+            (MVT_DB['Sold to'].values == minus1_line['Sold to']) & \
+            (MVT_DB['Mvt Code'].values == '701') & \
+            (MVT_DB['QTY'].values >= 1) & \
+            (MVT_DB['QTY_Unallocated'].values >= 1)
+        ]
+    elif minus1_line['PO'] != '-2': # If it's a PO, we don't check with the mvt codes
+        plus1_lines = MVT_DB.loc[
+            (MVT_DB['Posting Date'].values >= minus1_line['Posting Date']) & \
+            (MVT_DB['Batch'].values == minus1_line['Batch']) & \
+            (MVT_DB['PO'].values == minus1_line['PO']) & \
+            (MVT_DB['QTY'].values >= 1) & \
+            (MVT_DB['QTY_Unallocated'].values >= 1)
+        ]
+    else:  # Standard mvt
+        plus1_lines = MVT_DB.loc[
+            (MVT_DB['Posting Date'].values == minus1_line['Posting Date']) & \
+            (MVT_DB['Company'].values == minus1_line['Company']) & \
+            (MVT_DB['Sold to'].values == minus1_line['Sold to']) & \
+            (MVT_DB['Batch'].values == minus1_line['Batch']) & \
+            (MVT_DB['Mvt Code'].values == minus1_line['Mvt Code']) & \
+            (MVT_DB['Document'].values == minus1_line['Document']) & \
+            (MVT_DB['QTY'].values >= 1) & \
+            (MVT_DB['QTY_Unallocated'].values >= 1)
+        ]
+    
+    return plus1_lines
+
+
+def find_plus1_lines_nobatch(MVT_DB, minus1_line):
+    plus1_lines = MVT_DB.loc[
+            (MVT_DB['Posting Date'].values == minus1_line['Posting Date']) & \
+            (MVT_DB['Company'].values == minus1_line['Company']) & \
+            (MVT_DB['Sold to'].values == minus1_line['Sold to']) & \
+            (MVT_DB['Mvt Code'].values == minus1_line['Mvt Code']) & \
+            (MVT_DB['Document'].values == minus1_line['Document']) & \
+            (MVT_DB['QTY'].values >= 1) & \
+            (MVT_DB['QTY_Unallocated'].values >= 1)
+        ]
+    return plus1_lines

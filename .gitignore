@@ -1,1 +1,5 @@
 product_trailer/__pycache__
+tests/__pycache__
+
+databases/*
+reports_out/*
