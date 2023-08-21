@@ -99,24 +99,31 @@ def prep_mvt_tracking_db(new_raw_mvt):
 
 
 def extract_items(raw_mvt):
-    trailed_products = raw_mvt.loc[(raw_mvt['Mvt Code'].isin(_RETURN_CODES_)) \
-                             & (raw_mvt['Special Stock Ind Code'] == 'K') \
-                             & (raw_mvt['Material Type Code'] == 'FERT')].copy()
-    trailed_products['ID_temp'] = '_' + trailed_products['Company'].astype(str) + '/' \
-                               + trailed_products['Sold to'].astype(str).str[4:11] + '/' + trailed_products['Posting Date'].astype(str) + '_' \
-                               + trailed_products['SKU'].astype('str') + ':' + trailed_products['Batch'].astype('str')
-    trailed_products['NbLines'] = (-trailed_products['QTY']).apply(np.floor).astype(int)
-    
-    tp2 = trailed_products.loc[trailed_products.index.repeat(trailed_products['NbLines'])].copy()
-    tp2['ID'] = tp2['ID_temp'] + ':' + (1 + tp2.groupby('ID_temp').cumcount()).astype(str)
-    
-    tp2 = (
-        tp2[['ID', 'Posting Date', 'Company', 'Country', 'SLOC',
-                 'Sold to', 'Brand', 'Category', 'SKU', 'Batch', 'Standard Price']]
+
+    ID_definition = ['Company', 'SLOC', 'Sold to', 'Mvt Code', 'Posting Date', 'SKU', 'Batch']
+    company_features = ['Company', 'Country']
+    sku_features = ['SKU', 'Brand', 'Category']
+
+    def build_ID(item):
+        return f"_{item['Company']}/{item['SLOC']}/{item['Sold to'][4:11]}_" \
+                + f"{item['Mvt Code']}/{item['Posting Date']:%Y-%m-%d}_" \
+                + f"{item['SKU']}:{item['Batch']}"
+
+    trailed_products = (
+        raw_mvt
+        .copy()
+        .loc[(raw_mvt['Mvt Code'].isin(_RETURN_CODES_)) \
+             & (raw_mvt['Special Stock Ind Code'] == 'K') \
+             & (raw_mvt['Material Type Code'] == 'FERT')]
+        .pivot_table(observed=True, values=['Unit_Value', 'QTY'], aggfunc={'Unit_Value': 'mean', 'QTY': 'sum'}, index=ID_definition)
+        .reset_index()
+        .assign(ID = lambda df: df.apply(build_ID, axis=1))
+        .merge(raw_mvt.value_counts(company_features).reset_index()[company_features].drop_duplicates(keep='first'), on='Company')
+        .merge(raw_mvt.value_counts(sku_features).reset_index()[sku_features].drop_duplicates(keep='first'), on='SKU')
         .set_index('ID')
-        .assign(QTY_Returned = 1)
         .assign(Open = True)
-        .assign(Waypoints = tp2[_WAYPOINTS_DEF_].values.tolist())
+        .assign(QTY = lambda df: -df['QTY'])
+        .assign(Waypoints = lambda df: df.apply(lambda row: [row[_WAYPOINTS_DEF_].values.tolist()], axis=1))
         .rename(columns={
             'Posting Date': 'Return_Date',
             'Country': 'First_Country',
@@ -126,113 +133,172 @@ def extract_items(raw_mvt):
             'Batch': 'First_Batch'
         })
     )
-    tp2['Waypoints'] = tp2['Waypoints'].apply(lambda wpts: [wpts])
-    return tp2
+
+    return trailed_products
 
 
-#@profiler
 def process_task(task, Items_open, MVT_DB):
     task_items = Items_open.loc[(Items_open['SKU'] == task)].copy()
     task_MVTs = MVT_DB.loc[(MVT_DB['SKU'] == task)].copy()
 
     if len(task_MVTs) == 0:  # No mvt => Skip this
         return task_items, task_MVTs
-
-    for ID in task_items.index:  # Do the work on task_item and task_MVTs ...
-        hop_again = True
-        while hop_again:
-            hop_again, task_MVTs, task_items = next_hop(ID, task_MVTs, task_items)
     
-    return task_items, task_MVTs
+    # items_computed is a list of pd.Series
+    items_computed = []
+    for _, row in task_items.iterrows():
+        items_computed.extend(compute_route(row, task_MVTs))
+    df_items_computed = pd.DataFrame(items_computed) 
+    
+    return df_items_computed, task_MVTs
 
 
-# @profiler  # LINE_PROFILER
-def next_hop(ID, MVT_DB, tracked_items):
-    """ Carry out next hop for specified ID.
-    Returns:
-        True if could find a hop (incl half-hop) and successfully updated databases.
-        False if moving forward is not needed (part is burnt, or not able to find a -1 mvt)"""
-    
-    waypoints_list = tracked_items.loc[ID, 'Waypoints']
-    this_is_first_step = len(waypoints_list) == 1
-    latest_wpt = waypoints_list[-1]
-    
-    #
-    # 1: Find where the product currently is, and which Mvt code takes it away.
-    #
-    if np.isnan(tracked_items.loc[ID, 'Open']):  # It's not Open nor Closed: it's a PO for which we are looking for the receipt mvt
-        minus1_line = pd.Series({
-            'Posting Date': latest_wpt[0],
-            'Batch': latest_wpt[5],
-            'PO': latest_wpt[4],
-            'Mvt Code': 'PO'
-        })
+def compute_route(item: pd.Series, task_MVTs: pd.DataFrame):
+
+    list_new_items = compute_hop(item, task_MVTs)
+
+    if len(list_new_items) == 1:
+        if item.equals(list_new_items[0]):  # The product didn't travel further, that's all we see.
+            return [item]
+        
+    out =  [an_item for new_item in list_new_items for an_item in compute_hop(new_item, task_MVTs)]
+    return out
+
+
+def compute_hop(item: pd.Series, task_MVTs: pd.DataFrame):
+
+    this_is_first_step = len(item.Waypoints) == 1
+
+    if not np.isnan(item.Open):
+        minus_mvts = find_minus_lines(this_is_first_step, item.Waypoints[-1], task_MVTs, item.name)
     else:
-        minus1_lines = find_minus1_lines(this_is_first_step, latest_wpt, MVT_DB, ID)
+        minus_mvts = pd.DataFrame({
+            'Posting Date': item.Waypoints[-1][0],
+            'Batch': item.Waypoints[-1][5],
+            'PO': item.Waypoints[-1][4],
+            'Mvt Code': 'PO',
+            'QTY': item.QTY,
+            'QTY_Unallocated': item.QTY,
+            'Items_Allocated': []
+        })
 
-        if len(minus1_lines) == 0:  # Nothing found: The product didn't move
-            return (False, MVT_DB, tracked_items)
+    if len(minus_mvts) == 0:  # Nothing found: The product didn't move
+        return [item]
+    
+    new_items = []
+    
+    multiple_minuses = -minus_mvts.iloc[0].QTY < item.QTY
+    sub_ID_lv1 = 0
+    QTY_covered = 0
+
+    for _, minus_mvt in minus_mvts.iterrows():
+        hop_minus_QTY = min(item.QTY, -minus_mvt.QTY)  # This value is >0
+        plus_resolved = compute_plus_mvts(minus_mvt, hop_minus_QTY, task_MVTs, item.name)
+
+        for sub_ID_2, this_plus_resolved in enumerate(plus_resolved):
+            if multiple_minuses:
+                sub_ID = str(sub_ID_lv1) + ('.' + str(sub_ID_2) if (len(plus_resolved) > 1) else '')
+            else:
+                sub_ID = str(sub_ID_2) if (len(plus_resolved) > 1) else False
+
+            new_item = construct_new_item(item, instruction = 'standard',
+                                          data = {'minus_mvt': minus_mvt, 'qty': this_plus_resolved['qty'], 'plus_mvt': this_plus_resolved['plus_mvt']},
+                                          sub_ID=sub_ID)
+            new_items.append(new_item)
+
+        minus_mvt['QTY_Unallocated'] -= hop_minus_QTY
+        minus_mvt['Items_Allocated'].append(item.name)
         
-        minus1_line = minus1_lines.iloc[0]  # In case multiple lines are found, we take the 1st one
-        minus1_line_idx = minus1_line.name
+        QTY_covered += hop_minus_QTY
+        if QTY_covered == item.QTY:
+            break
+        elif QTY_covered > item.QTY:
+            raise Exception(f'Over-cover! Covered {QTY_covered} [-] for item qty {item.QTY}')
+
+        sub_ID_lv1 += 1
+    
+    if QTY_covered < item.QTY:
+        new_item = construct_new_item(item, instruction = 'LastMinusNeeds_subID',
+                                      data = {'qty': item.QTY - QTY_covered},
+                                      sub_ID=str(sub_ID_lv1))
+        new_items.append(new_item)
+    
+    return new_items
+
+
+def compute_plus_mvts(minus_mvt: pd.Series, desired_QTY: int, task_MVTs: pd.DataFrame, ID: str):
+    """Tried to find the [+] mvts: where the product has moved to.
+    minus_mvt: Info about the [-] mvt
+    desired_QTY: the quantity we track
+    task_MVTs: A df containing movements"""
+    plus_mvts = find_plus_lines(minus_mvt, task_MVTs)
+
+    if len(plus_mvts) == 0:  # No 1st-pass result for a +1: we widen the search
+        if minus_mvt['PO'] != '-2':  # Except if we were looking for 2nd half of PO but didn't find it (maybe in next report?)
+            return [{'qty': desired_QTY, 'plus_mvt': 'PO2ndPartMissing'}]
         
-        # Check if it's a re-return (prevent double-counting the physical product, and having troubles later on)
-        if (not this_is_first_step) and (minus1_line['Mvt Code'] in _RETURN_CODES_):
-            new_wpt = [minus1_line['Posting Date'], minus1_line['Company'], f"RE-RETURNED", latest_wpt[3], minus1_line['Mvt Code'], latest_wpt[5]]
-            tracked_items.loc[ID, 'Waypoints'].append(new_wpt)
-            tracked_items.loc[ID, 'Open'] = False
-            return (False, MVT_DB, tracked_items)
+        plus_mvts = find_plus_lines_nobatch(minus_mvt, task_MVTs) # Last chance to find a [+]: let's remove the filter on batch#
+        if len(plus_mvts) == 0:  # Part is burnt or is on a PO
+            return [{'qty': desired_QTY, 'plus_mvt': 'BURNT'}]
     
-        MVT_DB.loc[minus1_line_idx, 'QTY_Unallocated'] -= 1
-        MVT_DB.loc[minus1_line_idx, 'Items_Allocated'].append(ID)
-    
-    #
-    # 2: We have the -1, let's find the +1
-    #
-    plus1_lines = find_plus1_lines(minus1_line, MVT_DB)
+    QTY_covered = 0
+    plus_resolved = []
+    for _, plus_mvt in plus_mvts.iterrows():
+        addnl_cover_QTY = min(plus_mvt.QTY, desired_QTY-QTY_covered)
+        plus_resolved.append({'qty': addnl_cover_QTY, 'plus_mvt': plus_mvt})
+        plus_mvt['QTY_Unallocated'] -= addnl_cover_QTY
+        plus_mvt['Items_Allocated'].append(ID)
 
-    if len(plus1_lines) == 0:  # No 1st-pass result for a +1: we widen the search
-        if np.isnan(tracked_items.loc[ID, 'Open']):  # Except if we were looking for 2nd half of PO but didn't find it (maybe in next report?)
-            return (False, MVT_DB, tracked_items)
+        QTY_covered += addnl_cover_QTY
+        if QTY_covered >= desired_QTY:
+            break
+    
+    if QTY_covered < desired_QTY:  # Ex: If we found 4 [+] for 5 [-], we assume the last unit was burnt
+        plus_resolved.append({'qty': desired_QTY-QTY_covered, 'plus_mvt': 'BURNT'})
+    
+    return plus_resolved
+    
+
+def construct_new_item(item: pd.Series, instruction: str, data: dict, sub_ID: bool | str):
+    new_item = item.copy(deep=True)
+    new_item.Waypoints = item.Waypoints.copy()  # Needed to make a separate copy of the list of Waypoints.
+    # Note the waypoints themselves still link to the same memory space. copy.deepcopy() would solve this, if this was an issue.
+
+    if instruction == 'LastMinusNeeds_subID':
+        new_item.QTY = data['qty']
+        new_item.name = new_item.name + '.' + sub_ID
+        return new_item
+    
+    # Not needed condition: elif instruction == 'standard':
+    if isinstance(data['plus_mvt'], str):
+        if data['plus_mvt'] == 'BURNT':
+            new_item.Open = False
+            new_wpt = data['minus_mvt'][_WAYPOINTS_DEF_].tolist()
+            new_wpt[2] = f"BURNT {data['minus_mvt']['SLOC']}"
+        elif data['plus_mvt'] == 'PO2ndPartMissing':
+            new_item.Open = np.nan
+            new_wpt = data['minus_mvt'][_WAYPOINTS_DEF_].tolist()
+            new_wpt[2] = f"PO FROM {data['minus_mvt']['SLOC']}, mvt {data['minus_mvt']['Mvt Code']}"
+        else:
+            raise Exception('Unexpected [+] mvt resolution type.')
+    else:
+        new_wpt = data['plus_mvt'][_WAYPOINTS_DEF_].tolist()
+        if new_wpt[2] != 'NA': # Remove SoldTo if the SLOC isn't a Consignment
+            new_wpt[3] = np.nan
         
-        # Last chance to find a +1: let's remove the filter on batch#
-        plus1_lines = find_plus1_lines_nobatch(MVT_DB, minus1_line)
-      
-        if len(plus1_lines) == 0:  # Part is burnt or is on a PO
-            if minus1_line['PO'] != '-2':  # It's on a PO, we put the item semi-open (np.nan)
-                new_wpt = [minus1_line['Posting Date'], minus1_line['Company'], f"PO FROM {minus1_line['SLOC']}, mvt {minus1_line['Mvt Code']}", minus1_line['Sold to'], minus1_line['PO'], minus1_line['Batch']]
-                tracked_items.loc[ID, 'Open'] = np.nan
-            else:  # It's not on a PO, so it's been burnt
-                new_wpt = [minus1_line['Posting Date'], minus1_line['Company'], f"BURNT {minus1_line['SLOC']}", minus1_line['Sold to'], minus1_line['Mvt Code'], minus1_line['Batch']]
-                tracked_items.loc[ID, 'Open'] = False
-            
-            tracked_items.loc[ID, 'Waypoints'].append(new_wpt)
-            return (False, MVT_DB, tracked_items)
+        if data['minus_mvt']['Mvt Code'] != new_wpt[4]: # Combination of codes
+            new_wpt[4] = data['minus_mvt']['Mvt Code'] + '/' + new_wpt[4]
 
-    plus1_line = plus1_lines.iloc[0]
-    plus1_line_idx = plus1_line.name
+    new_item.Waypoints.append(new_wpt)
 
-    if np.isnan(tracked_items.loc[ID, 'Open']):  # If it's the 2nd half of a PO, then we set it back to Open
-        tracked_items.loc[ID, 'Open'] = True
-    
-    MVT_DB.loc[plus1_line_idx, 'QTY_Unallocated'] -= 1
-    MVT_DB.loc[plus1_line_idx, 'Items_Allocated'].append(ID)
-    
-    new_wpt = list(MVT_DB.loc[plus1_line_idx, _WAYPOINTS_DEF_])
-    if new_wpt[2] != 'NA': # Remove SoldTo if the SLOC isn't a Consignment
-        new_wpt[3] = np.nan
-    
-    if minus1_line['Mvt Code'] != plus1_line['Mvt Code']: # Combination of codes
-        new_wpt[4] = minus1_line['Mvt Code'] + '/' + plus1_line['Mvt Code']
-    
-    if this_is_first_step: # Remove 1st mvt code
-        tracked_items.loc[ID, 'Waypoints'][0][4] = '-'
-    
-    tracked_items.loc[ID, 'Waypoints'].append(new_wpt)
-    return (True, MVT_DB, tracked_items)
+    new_item.QTY = data['qty']
+    if sub_ID:
+        new_item.name = new_item.name + '.' + sub_ID
+
+    return new_item
 
 
-def find_minus1_lines(this_is_first_step, latest_wpt, MVT_DB, ID):
+def find_minus_lines(this_is_first_step, latest_wpt, MVT_DB, ID):
     if not this_is_first_step:
         if latest_wpt[2] == 'NA': # Add filter on SoldTo if SKU is in consignment
             minus1_line = MVT_DB.loc[
@@ -269,7 +335,7 @@ def find_minus1_lines(this_is_first_step, latest_wpt, MVT_DB, ID):
     return minus1_line
 
 
-def find_plus1_lines(minus1_line, MVT_DB):  # We start with the exceptions, and the general case is down
+def find_plus_lines(minus1_line, MVT_DB):  # We start with the exceptions, and the general case is down
     if minus1_line['Mvt Code'] == '956': # Change of SoldTo
         plus1_lines = MVT_DB.loc[
             (MVT_DB['Posting Date'].values == minus1_line['Posting Date']) & \
@@ -312,7 +378,7 @@ def find_plus1_lines(minus1_line, MVT_DB):  # We start with the exceptions, and 
     return plus1_lines
 
 
-def find_plus1_lines_nobatch(MVT_DB, minus1_line):
+def find_plus_lines_nobatch(minus1_line, MVT_DB):
     plus1_lines = MVT_DB.loc[
             (MVT_DB['Posting Date'].values == minus1_line['Posting Date']) & \
             (MVT_DB['Company'].values == minus1_line['Company']) & \

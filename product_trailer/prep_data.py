@@ -33,7 +33,8 @@ def prep_raw_mvt(filepath):
         'Storage Location Code': 'SLOC',
         'Sold to Customer': 'Sold to',
         'Material': 'SKU',
-        'Batch No': 'Batch'
+        'Batch No': 'Batch',
+        'Standard Price': 'Unit_Value'
     }, inplace=True)
 
     for col_name in ['Special Stock Ind Code', 'SLOC', 'Batch']:
