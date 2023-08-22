@@ -19,7 +19,7 @@ def scan_new_input(foldername, config, prefix_input_files=''):
 
     
     unprocessed_raw_files = config.find_unprocessed_files(foldername, prefix_input_files)
-    print(f'Detected {len(unprocessed_raw_files)} file(s) not processed.\n')
+    print(f'Detected {len(unprocessed_raw_files)} file(s) not processed.')
 
     tracked = None
     for filename in unprocessed_raw_files:
@@ -30,17 +30,16 @@ def scan_new_input(foldername, config, prefix_input_files=''):
 
 
 def process_mvt_file(filepath, config):
-    print(f"\n##### Process new movements: {filepath}")
+    print(f"\n##### Process new movements: {filepath}", end='')
     
     # ############################## PART 1 ##############################
-    print('Reading input movement data... ', end='')
     new_raw_mvt = prep_raw_mvt(filepath)
     MVT_DB = prep_mvt_tracking_db(new_raw_mvt)
     max_MVT_date = MVT_DB['Posting Date'].max().strftime("%Y-%m-%d")
-    print(f'{MVT_DB.shape[0]} rows... Done')
+    print(f' [x{MVT_DB.shape[0]}]')
 
     # BUG TO CORRECT: Do NOT open a DB which already contains the Items we want to track
-    print('Preparing items database... ', end='')
+    print('Preparing items... ', end='')
     new_tracked_items = extract_items(new_raw_mvt)
     saved_items = config.fetch_saved_items()
     if isinstance(saved_items, pd.DataFrame):
@@ -51,7 +50,6 @@ def process_mvt_file(filepath, config):
         print(f'0 saved + {new_tracked_items.shape[0]} new = Total {tracked_items.shape[0]}')
     
     # ############################## PART 2 ##############################
-    print('Preparing for computation... ', end='')
     Items_open = tracked_items.loc[tracked_items['Open'].fillna(True)].copy()
     list_computed_items = [tracked_items.loc[~tracked_items['Open'].fillna(True)].copy()] # List of df for Items which are closed. Will be toped up with the ones we will work on.
     
@@ -65,7 +63,6 @@ def process_mvt_file(filepath, config):
     
     MVT_DB = MVT_DB.loc[MVT_DB['SKU'].isin(tasks_queue)]  # Select the combinations which are interesting
     list_computed_MVTS = [] # Empty list for now
-    print('Done.')
 
     # Looping through the tasks
     for task in (pbar := tqdm.tqdm(tasks_queue, desc='Crunching... ')):
@@ -79,7 +76,7 @@ def process_mvt_file(filepath, config):
     tracked_items = pd.concat(list_computed_items, axis=0)
     
     # ############################## PART 3 ##############################
-    print('Saving...', end='')
+    print(f'Saving {tracked_items.shape[0]} items... ', end='')
     date_range_db = tracked_items['Return_Date'].min().strftime("%Y-%m-%d") + "..." + max_MVT_date
     config.save_items(tracked_items, date_range_db)
     config.save_movements(list_computed_MVTS, date_range_db)
@@ -173,13 +170,16 @@ def compute_hop(item: pd.Series, task_MVTs: pd.DataFrame):
         minus_mvts = find_minus_lines(this_is_first_step, item.Waypoints[-1], task_MVTs, item.name)
     else:
         minus_mvts = pd.DataFrame({
-            'Posting Date': item.Waypoints[-1][0],
-            'Batch': item.Waypoints[-1][5],
-            'PO': item.Waypoints[-1][4],
-            'Mvt Code': 'PO',
-            'QTY': item.QTY,
-            'QTY_Unallocated': item.QTY,
-            'Items_Allocated': []
+            'Posting Date': [item.Waypoints[-1][0]],
+            'Batch': [item.Waypoints[-1][5]],
+            'PO': [item.Waypoints[-1][4]],
+            'Mvt Code': ['PO'],
+            'Company': [item.Waypoints[-1][1]], 
+            'SLOC': [item.Waypoints[-1][2]], 
+            'Sold to': [item.Waypoints[-1][3]],
+            'QTY': [-item.QTY],
+            'QTY_Unallocated': [item.QTY],
+            'Items_Allocated': [[]]
         })
 
     if len(minus_mvts) == 0:  # Nothing found: The product didn't move
@@ -276,12 +276,16 @@ def construct_new_item(item: pd.Series, instruction: str, data: dict, sub_ID: bo
             new_wpt = data['minus_mvt'][_WAYPOINTS_DEF_].tolist()
             new_wpt[2] = f"BURNT {data['minus_mvt']['SLOC']}"
         elif data['plus_mvt'] == 'PO2ndPartMissing':
+            if data['minus_mvt']['SLOC'][:7] == 'PO FROM':  # Don't add a waypoint if we haven't found 2nd part of the PO for 2+ times in a row
+                return new_item
             new_item.Open = np.nan
             new_wpt = data['minus_mvt'][_WAYPOINTS_DEF_].tolist()
             new_wpt[2] = f"PO FROM {data['minus_mvt']['SLOC']}, mvt {data['minus_mvt']['Mvt Code']}"
+            new_wpt[4] = data['minus_mvt']['PO']
         else:
             raise Exception('Unexpected [+] mvt resolution type.')
     else:
+        new_item.Open = True
         new_wpt = data['plus_mvt'][_WAYPOINTS_DEF_].tolist()
         if new_wpt[2] != 'NA': # Remove SoldTo if the SLOC isn't a Consignment
             new_wpt[3] = np.nan
