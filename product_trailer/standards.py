@@ -10,8 +10,6 @@ _MVT_DB_COLUMNS_ = ['Posting Date', 'Company', 'Country', 'Document', 'PO',
 _RETURN_CODES_ = ['632', '932', '956']
 
 _RAW_DIR_ = 'raw_data/'
-_DB_DIR_ = 'databases/'
-_REPORTS_DIR_ = 'reports_out/'
 _POSTPROCESSING_DIR_ = 'post_processing/'
 
 
@@ -20,6 +18,4 @@ __all__ = ['_ID_SPECS_',
            '_MVT_DB_COLUMNS_',
            '_RETURN_CODES_',
            '_RAW_DIR_',
-           '_DB_DIR_',
-           '_REPORTS_DIR_',
            '_POSTPROCESSING_DIR_']

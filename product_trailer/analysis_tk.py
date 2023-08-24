@@ -38,7 +38,7 @@ def post_process(tracked_Items_analysis):
     return TI
 
 
-def save_report(tracked_Items_analysis, dest=_REPORTS_DIR_, tab_with_waypoints=False):
+def save_report(tracked_Items_analysis, dest, tab_with_waypoints=False):
     date_range = tracked_Items_analysis['Return_Date'].min()+ ".." + tracked_Items_analysis['Return_Date'].max()
     dt_now = datetime.today().strftime("%Y-%m-%d %Hh%M")
     outp_filename = os.path.join(dest, f'Returns -- Saved {dt_now} -- Returns range {date_range}.xlsx')
