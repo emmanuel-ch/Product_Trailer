@@ -86,13 +86,14 @@ def process_mvt_file(filepath, config):
 
 
 def prep_mvt_tracking_db(new_raw_mvt):
-    new_mvts = new_raw_mvt[_MVT_DB_COLUMNS_].copy()
-    mvt_rm_columns = ['Country', 'Special Stock Ind Code', 'Material Type Code', 'Brand', 'Category']
-    new_mvts = new_mvts.drop(columns=mvt_rm_columns)
-    new_mvts['QTY_Unallocated'] = new_mvts['QTY'].apply(lambda qty: max(qty, -qty))
-    new_mvts['Items_Allocated'] = new_mvts.apply(lambda r: [], result_type='reduce', axis=1)
+    new_mvts = (
+        new_raw_mvt
+        .copy()
+        .drop(columns=['Country', 'Special Stock Ind Code', 'Brand', 'Category', 'Unit_Value'])
+        .assign(QTY_Unallocated = lambda df: df['QTY'].apply(abs))
+        .assign(Items_Allocated = lambda df: df.apply(lambda _: [], result_type='reduce', axis=1))
+    )
     return new_mvts
-
 
 def extract_items(raw_mvt):
 
@@ -108,9 +109,7 @@ def extract_items(raw_mvt):
     trailed_products = (
         raw_mvt
         .copy()
-        .loc[(raw_mvt['Mvt Code'].isin(_RETURN_CODES_)) \
-             & (raw_mvt['Special Stock Ind Code'] == 'K') \
-             & (raw_mvt['Material Type Code'] == 'FERT')]
+        .loc[(raw_mvt['Mvt Code'].isin(_RETURN_CODES_))  & (raw_mvt['Special Stock Ind Code'] == 'K')]
         .pivot_table(observed=True, values=['Unit_Value', 'QTY'], aggfunc={'Unit_Value': 'mean', 'QTY': 'sum'}, index=ID_definition)
         .reset_index()
         .assign(ID = lambda df: df.apply(build_ID, axis=1))

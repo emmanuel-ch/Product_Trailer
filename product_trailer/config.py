@@ -11,7 +11,6 @@ class Config():
         self.profile_path = os.path.join('profiles', self.profile_name)
         self.config_path = os.path.join('profiles', self.profile_name, 'config.toml')
         self.database_path = os.path.join('profiles', self.profile_name, 'database')
-        self.customtools_path = os.path.join('profiles', self.profile_name, 'custom_tools.py')
         self.import_config()
 
 

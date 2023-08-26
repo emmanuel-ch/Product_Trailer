@@ -2,7 +2,7 @@ import pandas as pd
 
 def import_movements(filepath):
     
-    raw_mvt_dtypes = {
+    inputcols_dtypes = {
         'Posting Date': 'datetime64[ns]',
         'Company': 'category',
         'Country ISO Code': 'category',
@@ -20,10 +20,7 @@ def import_movements(filepath):
         'QTY': 'int16',
         'Standard Price': 'float32',
     }
-
-    raw_mvt = pd.read_excel(filepath, dtype=raw_mvt_dtypes)#, parse_dates=['Posting Date'], date_format='%d/%m/%Y')
-
-    raw_mvt.rename(columns={
+    renaming_dict = {
         'Country ISO Code': 'Country',
         'Material Document Number': 'Document',
         'Purchase Order Document Number': 'PO',
@@ -33,10 +30,21 @@ def import_movements(filepath):
         'Material': 'SKU',
         'Batch No': 'Batch',
         'Standard Price': 'Unit_Value'
-    }, inplace=True)
+    }
+    output_cols = ['Posting Date', 'Company', 'Country', 'Document', 'PO',
+                   'Special Stock Ind Code', 'Mvt Code', 'SLOC', 'Sold to',
+                   'Brand', 'Category', 'SKU', 'Batch', 'QTY', 'Unit_Value']
+
+    raw_mvt = (
+        pd.read_excel(filepath, dtype=inputcols_dtypes)
+        .rename(columns=renaming_dict)
+        .pipe(lambda df: df.loc[df['Material Type Code'] == 'FERT'])
+        .sort_values(by=['Posting Date', 'QTY'], ascending=[True, False])
+    )
 
     for col_name in ['Special Stock Ind Code', 'SLOC']:
         raw_mvt[col_name] = raw_mvt[col_name].cat.add_categories('NA')
         raw_mvt[col_name].fillna('NA', inplace=True)
 
-    return raw_mvt.sort_values(by=['Posting Date', 'QTY'], ascending=[True, False])
+    return raw_mvt[output_cols]
+
