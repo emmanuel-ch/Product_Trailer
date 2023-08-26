@@ -2,6 +2,7 @@
 import os
 import shutil
 import tomllib
+import importlib
 
 class Config():
 
@@ -10,29 +11,27 @@ class Config():
         self.profile_path = os.path.join('profiles', self.profile_name)
         self.config_path = os.path.join('profiles', self.profile_name, 'config.toml')
         self.database_path = os.path.join('profiles', self.profile_name, 'database')
+        self.customtools_path = os.path.join('profiles', self.profile_name, 'custom_tools.py')
         self.import_config()
 
 
     def import_config(self):
         if not os.path.isdir(self.profile_path):
-            os.makedirs(self.profile_path)
-            os.makedirs(self.database_path)
-        if not os.path.isfile(self.config_path):
-            shutil.copy('./product_trailer/default_config.toml', self.config_path)  # Copy default config
+            shutil.copytree('./profiles/default_profile/', self.profile_path)
 
         with open(self.config_path, mode="rb") as fp:
             imported_config = tomllib.load(fp)
-        
-        self.items_saved_db_prefix = imported_config['database']['filename_tracked_items']
-        self.movement_db_prefix = imported_config['database']['filename_movements']
-        self.one_db = imported_config['database']['only_keep_latest_version']
-        self.save_mvts = imported_config['database']['save_movements']
+        self.db_config = imported_config['database']
 
         self.files_processed_dbpath = os.path.join(self.database_path, imported_config['database']['filename_files_processed'])
 
         self.reports_path = os.path.join('profiles', self.profile_name, imported_config['database']['reports_path'])
         if not os.path.isdir(self.reports_path):
             os.makedirs(self.reports_path)
+        
+        # Custom tools
+        custom_tools = importlib.import_module(f'profiles.{self.profile_name}.custom_tools')
+        self.import_movements = custom_tools.import_movements
 
         return True
 
@@ -65,7 +64,7 @@ class Config():
         import os
         import pandas as pd
 
-        possible_db = [filename for filename in ['nope'] + os.listdir(self.database_path) if filename.startswith(self.items_saved_db_prefix)]
+        possible_db = [filename for filename in ['nope'] + os.listdir(self.database_path) if filename.startswith(self.db_config['filename_tracked_items'])]
         if len(possible_db) == 0:
             self.item_db_filepath = ''
             return None
@@ -83,11 +82,11 @@ class Config():
         datetime_db_creation = datetime.today().strftime("%Y-%m-%d %Hh%M")
         new_db_filename = os.path.join(
             self.database_path, 
-            f'{self.items_saved_db_prefix} {date_range_db} (saved {datetime_db_creation}).pkl'
+            f"{self.db_config['filename_tracked_items']} {date_range_db} (saved {datetime_db_creation}).pkl"
             )
         tracked_items.to_pickle(new_db_filename)
         
-        if self.one_db:
+        if self.db_config['only_keep_latest_version']:
             if self.item_db_filepath != '':
                 os.remove(self.item_db_filepath)
         
@@ -99,9 +98,9 @@ class Config():
         import pandas as pd
         from datetime import datetime
 
-        if self.save_mvts:
+        if self.db_config['save_movements']:
             MVT_DB = pd.concat(list_computed_MVTS, axis=0)
-            possible_mvt_db = [filename for filename in ['nope'] + os.listdir(self.database_path) if filename.startswith(self.movement_db_prefix)]
+            possible_mvt_db = [filename for filename in ['nope'] + os.listdir(self.database_path) if filename.startswith(self.db_config['filename_movements'])]
             if len(possible_mvt_db) == 0:
                 new_MVT_DB = MVT_DB
                 prev_dbfilename_MVTS = ''
@@ -114,11 +113,11 @@ class Config():
             datetime_db_creation = datetime.today().strftime("%Y-%m-%d %Hh%M")
             new_db_mvt_filename = os.path.join(
                 self.database_path, 
-                f'{self.movement_db_prefix} {date_range_db} (saved {datetime_db_creation}).pkl'
+                f"{self.db_config['filename_movements']} {date_range_db} (saved {datetime_db_creation}).pkl"
                 )
             new_MVT_DB.to_pickle(new_db_mvt_filename)
             
-            if self.one_db:
+            if self.db_config['only_keep_latest_version']:
                 if prev_dbfilename_MVTS != '':
                     os.remove(prev_dbfilename_MVTS)
             

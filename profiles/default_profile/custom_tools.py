@@ -1,12 +1,12 @@
 import pandas as pd
-from .standards import *
 
-def prep_raw_mvt(filepath):
+def import_movements(filepath):
     
     raw_mvt_dtypes = {
+        'Posting Date': 'datetime64[ns]',
         'Company': 'category',
         'Country ISO Code': 'category',
-        'Material Document Number': 'category',
+        'Material Document Number': str,
         'Purchase Order Document Number': 'category',
         'Special Stock Ind Code': 'category',
         'Movement Type Code': 'category',
@@ -16,14 +16,12 @@ def prep_raw_mvt(filepath):
         'Brand': 'category',
         'Category': 'category',
         'Material': 'category',
-        'Batch No': 'category',
-        'QTY': 'float64',
-        'Standard Price': 'float64',
+        'Batch No': str,
+        'QTY': 'int16',
+        'Standard Price': 'float32',
     }
 
-    raw_mvt = pd.read_excel(filepath, \
-                            dtype=raw_mvt_dtypes,
-                            parse_dates=[0])
+    raw_mvt = pd.read_excel(filepath, dtype=raw_mvt_dtypes)#, parse_dates=['Posting Date'], date_format='%d/%m/%Y')
 
     raw_mvt.rename(columns={
         'Country ISO Code': 'Country',
@@ -37,7 +35,7 @@ def prep_raw_mvt(filepath):
         'Standard Price': 'Unit_Value'
     }, inplace=True)
 
-    for col_name in ['Special Stock Ind Code', 'SLOC', 'Batch']:
+    for col_name in ['Special Stock Ind Code', 'SLOC']:
         raw_mvt[col_name] = raw_mvt[col_name].cat.add_categories('NA')
         raw_mvt[col_name].fillna('NA', inplace=True)
 

@@ -7,7 +7,6 @@ import tqdm
 import os
 
 from .standards import *
-from .prep_data import prep_raw_mvt
 
 # LINE_PROFILER
 # import line_profiler
@@ -33,7 +32,7 @@ def process_mvt_file(filepath, config):
     print(f"\n##### Process new movements: {filepath}", end='')
     
     # ############################## PART 1 ##############################
-    new_raw_mvt = prep_raw_mvt(filepath)
+    new_raw_mvt = config.import_movements(filepath)
     MVT_DB = prep_mvt_tracking_db(new_raw_mvt)
     max_MVT_date = MVT_DB['Posting Date'].max().strftime("%Y-%m-%d")
     print(f' [x{MVT_DB.shape[0]}]')
@@ -70,7 +69,7 @@ def process_mvt_file(filepath, config):
 
         out_items, out_MVTs = process_task(task, Items_open, MVT_DB)
         list_computed_items.append(out_items)
-        if config.save_mvts:
+        if config.db_config['save_movements']:
             list_computed_MVTS.append(out_MVTs)
     
     tracked_items = pd.concat(list_computed_items, axis=0)

@@ -1,4 +1,5 @@
-product_trailer/__pycache__
-tests/__pycache__
+__pycache__/
+*.py[cod]
 
 profiles/*
+!profiles/default_profile
