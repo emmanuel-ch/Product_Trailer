@@ -31,6 +31,7 @@ class Config():
         # Custom tools
         custom_tools = importlib.import_module(f'profiles.{self.profile_name}.custom_tools')
         self.import_movements = custom_tools.import_movements
+        self.is_entry_point = custom_tools.is_entry_point
 
         return True
 

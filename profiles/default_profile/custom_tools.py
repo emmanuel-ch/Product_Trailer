@@ -48,3 +48,9 @@ def import_movements(filepath):
 
     return raw_mvt[output_cols]
 
+
+def is_entry_point(item: pd.DataFrame | pd.Series):
+    if isinstance(item, pd.Series):
+        return (item['Mvt Code'] in ['632', '932', '956'])  & (item['Special Stock Ind Code'] == 'K')
+    return (item['Mvt Code'].isin(['632', '932', '956']))  & (item['Special Stock Ind Code'] == 'K')
+

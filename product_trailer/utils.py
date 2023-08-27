@@ -39,7 +39,7 @@ def process_mvt_file(filepath, config):
 
     # BUG TO CORRECT: Do NOT open a DB which already contains the Items we want to track
     print('Preparing items... ', end='')
-    new_tracked_items = extract_items(new_raw_mvt)
+    new_tracked_items = extract_items(new_raw_mvt, config.is_entry_point)
     saved_items = config.fetch_saved_items()
     if isinstance(saved_items, pd.DataFrame):
         tracked_items = pd.concat([saved_items, new_tracked_items])
@@ -95,7 +95,7 @@ def prep_mvt_tracking_db(new_raw_mvt):
     )
     return new_mvts
 
-def extract_items(raw_mvt):
+def extract_items(raw_mvt, is_entry_point):
 
     ID_definition = ['Company', 'SLOC', 'Sold to', 'Mvt Code', 'Posting Date', 'SKU', 'Batch']
     company_features = ['Company', 'Country']
@@ -109,7 +109,7 @@ def extract_items(raw_mvt):
     trailed_products = (
         raw_mvt
         .copy()
-        .loc[(raw_mvt['Mvt Code'].isin(_RETURN_CODES_))  & (raw_mvt['Special Stock Ind Code'] == 'K')]
+        .pipe(lambda df: df.loc[df.apply(is_entry_point, axis=1)])
         .pivot_table(observed=True, values=['Unit_Value', 'QTY'], aggfunc={'Unit_Value': 'mean', 'QTY': 'sum'}, index=ID_definition)
         .reset_index()
         .assign(ID = lambda df: df.apply(build_ID, axis=1))
@@ -182,6 +182,9 @@ def compute_hop(item: pd.Series, task_MVTs: pd.DataFrame):
 
     if len(minus_mvts) == 0:  # Nothing found: The product didn't move
         return [item]
+    # FIXME: If this_is_first_step and 0 minus_mvts: means we already covered it (re-return).
+    # Note: To work, old items need to be listed before new items.
+    # In this case, return empty list
     
     new_items = []
     
@@ -284,6 +287,11 @@ def construct_new_item(item: pd.Series, instruction: str, data: dict, sub_ID: bo
             raise Exception('Unexpected [+] mvt resolution type.')
     else:
         new_item.Open = True
+
+        if len(new_item.Waypoints) == 1:
+            new_item.Waypoints[0][0] = pd.Timestamp(0)
+            new_item.Waypoints[0][4] = ''
+
         new_wpt = data['plus_mvt'][_WAYPOINTS_DEF_].tolist()
         if new_wpt[2] != 'NA': # Remove SoldTo if the SLOC isn't a Consignment
             new_wpt[3] = np.nan
