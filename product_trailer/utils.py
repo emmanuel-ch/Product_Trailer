@@ -156,7 +156,7 @@ def compute_route(item: pd.Series, task_MVTs: pd.DataFrame):
         if item.equals(list_new_items[0]):  # The product didn't travel further, that's all we see.
             return [item]
         
-    out =  [an_item for new_item in list_new_items for an_item in compute_hop(new_item, task_MVTs)]
+    out =  [an_item for new_item in list_new_items for an_item in compute_route(new_item, task_MVTs)]
     return out
 
 
