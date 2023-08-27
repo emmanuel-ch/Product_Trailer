@@ -193,7 +193,7 @@ def compute_hop(item: pd.Series, task_MVTs: pd.DataFrame):
     QTY_covered = 0
 
     for _, minus_mvt in minus_mvts.iterrows():
-        hop_minus_QTY = min(item.QTY, -minus_mvt.QTY)  # This value is >0
+        hop_minus_QTY = min(item.QTY - QTY_covered, -minus_mvt.QTY)  # This value is >0
         plus_resolved = compute_plus_mvts(minus_mvt, hop_minus_QTY, task_MVTs, item.name)
 
         for sub_ID_2, this_plus_resolved in enumerate(plus_resolved):
