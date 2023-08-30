@@ -6,10 +6,11 @@ If you ever wondered "Where was this product sourced from?" or "Have products re
 
 ## Framework & Usage
 
-To run the experience:
+To run the software:
 ```bash
 python -m product_trailer
 ```
+(To be added: Documentation about typical usage methodology, program architecture, screenshots)
 
 ## Requirements
 Developed on Python 3.11. 
