@@ -26,6 +26,8 @@ def post_process(tracked_Items_analysis):
         Max_date - TI['Return_Date'],
         TI['Waypoints'].apply(lambda wpts: wpts[-1][0]) - TI['Return_Date']
     )
+
+    TI['Num_Returns'] = TI['Waypoints'].apply(lambda wpts: np.count_nonzero(np.isin(np.array(wpts).flatten(), ['632', '932', '956/955'])))
     
     # Data formating
     TI['Return_Date'] = TI['Return_Date'].dt.strftime('%Y-%m-%d')

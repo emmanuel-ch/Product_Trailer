@@ -67,7 +67,9 @@ def process_mvt_file(filepath, config):
     for task in (pbar := tqdm.tqdm(tasks_queue, desc='Crunching... ')):
         pbar.set_postfix({'SKU': task}, refresh=False)
 
-        out_items, out_MVTs = process_task(task, Items_open, MVT_DB)
+        task_Items_open = Items_open.loc[(Items_open['SKU'] == task)].copy()
+        task_Movements = MVT_DB.loc[(MVT_DB['SKU'] == task)].copy()
+        out_items, out_MVTs = process_items_group(task_Items_open, task_Movements)
         list_computed_items.append(out_items)
         if config.db_config['save_movements']:
             list_computed_MVTS.append(out_MVTs)
@@ -132,10 +134,7 @@ def extract_items(raw_mvt, is_entry_point):
     return trailed_products
 
 
-def process_task(task, Items_open, MVT_DB):
-    task_items = Items_open.loc[(Items_open['SKU'] == task)].copy()
-    task_MVTs = MVT_DB.loc[(MVT_DB['SKU'] == task)].copy()
-
+def process_items_group(task_items, task_MVTs):
     if len(task_MVTs) == 0:  # No mvt => Skip this
         return task_items, task_MVTs
     
@@ -152,7 +151,9 @@ def compute_route(item: pd.Series, task_MVTs: pd.DataFrame):
 
     list_new_items = compute_hop(item, task_MVTs)
 
-    if len(list_new_items) == 1:
+    if len(list_new_items) == 0:
+        return []
+    elif len(list_new_items) == 1:
         if item.equals(list_new_items[0]):  # The product didn't travel further, that's all we see.
             return [item]
         
@@ -181,10 +182,13 @@ def compute_hop(item: pd.Series, task_MVTs: pd.DataFrame):
         })
 
     if len(minus_mvts) == 0:  # Nothing found: The product didn't move
+        if this_is_first_step:
+            # DOUBLE-COUNTING PREVENTION
+            # If we are here, it means the tracked product passes by an "entry point".
+            # To avoid double-counting, decision was made to keep tracking the already tracked product, 
+            # and do not register the new entry.
+            return []
         return [item]
-    # FIXME: If this_is_first_step and 0 minus_mvts: means we already covered it (re-return).
-    # Note: To work, old items need to be listed before new items.
-    # In this case, return empty list
     
     new_items = []
     
@@ -192,7 +196,7 @@ def compute_hop(item: pd.Series, task_MVTs: pd.DataFrame):
     sub_ID_lv1 = 0
     QTY_covered = 0
 
-    for _, minus_mvt in minus_mvts.iterrows():
+    for minus_idx, minus_mvt in minus_mvts.iterrows():
         hop_minus_QTY = min(item.QTY - QTY_covered, -minus_mvt.QTY)  # This value is >0
         plus_resolved = compute_plus_mvts(minus_mvt, hop_minus_QTY, task_MVTs, item.name)
 
@@ -207,8 +211,10 @@ def compute_hop(item: pd.Series, task_MVTs: pd.DataFrame):
                                           sub_ID=sub_ID)
             new_items.append(new_item)
 
-        minus_mvt['QTY_Unallocated'] -= hop_minus_QTY
-        minus_mvt['Items_Allocated'].append(item.name)
+        if minus_mvt['Mvt Code'] != 'PO':
+            task_MVTs.loc[minus_idx, 'QTY_Unallocated'] -= hop_minus_QTY
+            task_MVTs.loc[minus_idx, 'Items_Allocated'].append(item.name)
+        
         
         QTY_covered += hop_minus_QTY
         if QTY_covered == item.QTY:
@@ -244,11 +250,13 @@ def compute_plus_mvts(minus_mvt: pd.Series, desired_QTY: int, task_MVTs: pd.Data
     
     QTY_covered = 0
     plus_resolved = []
-    for _, plus_mvt in plus_mvts.iterrows():
+    for plus_idx, plus_mvt in plus_mvts.iterrows():
         addnl_cover_QTY = min(plus_mvt.QTY, desired_QTY-QTY_covered)
         plus_resolved.append({'qty': addnl_cover_QTY, 'plus_mvt': plus_mvt})
-        plus_mvt['QTY_Unallocated'] -= addnl_cover_QTY
-        plus_mvt['Items_Allocated'].append(ID)
+
+        task_MVTs.loc[plus_idx, 'QTY_Unallocated'] -= addnl_cover_QTY
+        task_MVTs.loc[plus_idx, 'Items_Allocated'].append(ID)
+        
 
         QTY_covered += addnl_cover_QTY
         if QTY_covered >= desired_QTY:
