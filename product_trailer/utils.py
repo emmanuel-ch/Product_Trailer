@@ -33,13 +33,13 @@ def process_mvt_file(filepath, config):
     
     # ############################## PART 1 ##############################
     new_raw_mvt = config.import_movements(filepath)
-    MVT_DB = prep_mvt_tracking_db(new_raw_mvt)
+    MVT_DB = prep_mvt_tracking_db(new_raw_mvt, config)
     max_MVT_date = MVT_DB['Posting Date'].max().strftime("%Y-%m-%d")
     print(f' [x{MVT_DB.shape[0]}]')
 
     # BUG TO CORRECT: Do NOT open a DB which already contains the Items we want to track
     print('Preparing items... ', end='')
-    new_tracked_items = extract_items(new_raw_mvt, config.is_entry_point)
+    new_tracked_items = extract_items(new_raw_mvt, config)
     saved_items = config.fetch_saved_items()
     if isinstance(saved_items, pd.DataFrame):
         tracked_items = pd.concat([saved_items, new_tracked_items])
@@ -87,21 +87,23 @@ def process_mvt_file(filepath, config):
     return True
 
 
-def prep_mvt_tracking_db(new_raw_mvt):
+def prep_mvt_tracking_db(new_raw_mvt, config):
     new_mvts = (
         new_raw_mvt
         .copy()
-        .drop(columns=['Country', 'Special Stock Ind Code', 'Brand', 'Category', 'Unit_Value'])
+        .drop(columns=[*config.input_features['company_features'], 
+                       *config.input_features['sku_features'], 
+                       'Special Stock Ind Code', 'Unit_Value'])
         .assign(QTY_Unallocated = lambda df: df['QTY'].apply(abs))
         .assign(Items_Allocated = lambda df: df.apply(lambda _: [], result_type='reduce', axis=1))
     )
     return new_mvts
 
-def extract_items(raw_mvt, is_entry_point):
+def extract_items(raw_mvt, config):
 
     ID_definition = ['Company', 'SLOC', 'Sold to', 'Mvt Code', 'Posting Date', 'SKU', 'Batch']
-    company_features = ['Company', 'Country']
-    sku_features = ['SKU', 'Brand', 'Category']
+    company_features = ['Company', *config.input_features['company_features']]
+    sku_features = ['SKU', *config.input_features['sku_features']]
 
     def build_ID(item):
         return f"_{item['Company']}/{item['SLOC']}/{item['Sold to'][4:11]}_" \
@@ -111,7 +113,7 @@ def extract_items(raw_mvt, is_entry_point):
     trailed_products = (
         raw_mvt
         .copy()
-        .pipe(lambda df: df.loc[df.apply(is_entry_point, axis=1)])
+        .pipe(lambda df: df.loc[df.apply(config.is_entry_point, axis=1)])
         .pivot_table(observed=True, values=['Unit_Value', 'QTY'], aggfunc={'Unit_Value': 'mean', 'QTY': 'sum'}, index=ID_definition)
         .reset_index()
         .assign(ID = lambda df: df.apply(build_ID, axis=1))

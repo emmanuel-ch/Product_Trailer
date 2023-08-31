@@ -28,6 +28,9 @@ class Config():
         if not os.path.isdir(self.reports_path):
             os.makedirs(self.reports_path)
         
+        # Custom features in input file
+        self.input_features = imported_config['input_data']
+
         # Custom tools
         custom_tools = importlib.import_module(f'profiles.{self.profile_name}.custom_tools')
         self.import_movements = custom_tools.import_movements

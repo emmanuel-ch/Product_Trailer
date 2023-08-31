@@ -5,3 +5,7 @@ filename_files_processed = 'input_files_processed.pkl'
 only_keep_latest_version = true
 save_movements = false
 reports_path = ''
+
+[input_data]
+sku_features = ['Brand', 'Category']
+company_features = ['Country']
