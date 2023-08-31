@@ -6,7 +6,8 @@ import numpy as np
 import tqdm
 import os
 
-from .standards import *
+_WAYPOINTS_DEF_ = ['Posting Date', 'Company', 'SLOC', 'Sold to', 'Mvt Code', 'Batch']  # Order matters!
+
 
 # LINE_PROFILER
 # import line_profiler

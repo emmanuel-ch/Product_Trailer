@@ -1,11 +1,9 @@
 import argparse
 import os
 
-from .standards import *
 
 def main():
     from . import utils
-    from .standards import _RAW_DIR_
     from .config import Config
 
     # Arg parser
@@ -13,7 +11,7 @@ def main():
                     prog = 'Product-Trailer',
                     description = 'Tracking products through supply-chain network by using product movement logs.')
     parser.add_argument('profile_name')
-    parser.add_argument('-r', '--raw-dir', default=_RAW_DIR_)
+    parser.add_argument('-r', '--raw-dir', default='raw_data/')
     parser.add_argument('-p', '--raw-prefix', default='Extract log')
     parser.add_argument('-ne', '--no-excel-report', default=False, action='store_true')
     args = parser.parse_args()

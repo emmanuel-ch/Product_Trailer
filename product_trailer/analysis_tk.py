@@ -3,7 +3,6 @@ import numpy as np
 import pandas as pd
 from datetime import datetime
 from itertools import groupby
-from .standards import *
 
 
 def post_process(tracked_Items_analysis):
