@@ -37,10 +37,15 @@ def postprocess(self, tracked_items: pd.DataFrame):
     TI['Waypoints'] = TI['Waypoints'].apply(lambda wpts: decorate_wpts(wpts))
     
 
-    # Filename
+    # Make a detailed view of the route
+    from product_trailer.postprocessing_tk import make_exportable_hist
+    detailed_view = make_exportable_hist(tracked_items)
+
+
+    # Saving to Excel
     date_range = TI['Return_Date'].min()+ ".." + TI['Return_Date'].max()
     dt_now = datetime.today().strftime("%Y-%m-%d %Hh%M")
     out_filename = f'Returns -- Saved {dt_now} -- Range {date_range}.xlsx'
-    self.report_to_excel({'summary': TI}, out_filename)
+    self.report_to_excel({'summary': TI, 'details': detailed_view}, out_filename)
 
     return True
