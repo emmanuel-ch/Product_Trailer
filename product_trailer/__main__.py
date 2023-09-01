@@ -1,5 +1,4 @@
 import argparse
-import os
 
 
 def main():
@@ -26,13 +25,10 @@ def main():
     
     # Post-processing
     if not args.no_excel_report:
-        from . import analysis_tk
-        print('\nPost-processing...')
-
-        tracked_file = config.fetch_saved_items()
-        post_processed_analysis = analysis_tk.post_process(tracked_file)
-        report_filename = analysis_tk.save_report(post_processed_analysis, config.reports_path, tab_with_waypoints=False)
-        print(f'Post-processed report saved: {report_filename}')
+        print('\nPost-processing... ', end='')
+        tracked_items = config.fetch_saved_items()
+        config.postprocess(tracked_items)
+        print('Finished.')
     
     # End of program
     print('\n' + ' Program finished '.center(80, '#'), end='\n\n\n')

@@ -3,6 +3,7 @@ import os
 import shutil
 import tomllib
 import importlib
+import pandas as pd
 
 class Config():
 
@@ -15,15 +16,17 @@ class Config():
 
 
     def import_config(self):
+        # Copy default config if none exists
         if not os.path.isdir(self.profile_path):
             shutil.copytree('./profiles/default_profile/', self.profile_path)
 
+        # Import config parameters
         with open(self.config_path, mode="rb") as fp:
             imported_config = tomllib.load(fp)
         self.db_config = imported_config['database']
-
         self.files_processed_dbpath = os.path.join(self.database_path, imported_config['database']['filename_files_processed'])
 
+        # Report path setup
         self.reports_path = os.path.join('profiles', self.profile_name, imported_config['database']['reports_path'])
         if not os.path.isdir(self.reports_path):
             os.makedirs(self.reports_path)
@@ -35,7 +38,12 @@ class Config():
         custom_tools = importlib.import_module(f'profiles.{self.profile_name}.custom_tools')
         self.import_movements = custom_tools.import_movements
         self.is_entry_point = custom_tools.is_entry_point
+        return True
+    
 
+    def postprocess(self, tracked_items):
+        custom_postprocessing = importlib.import_module(f'profiles.{self.profile_name}.postprocessing')
+        custom_postprocessing.postprocess(self, tracked_items)
         return True
 
     
@@ -126,3 +134,17 @@ class Config():
             
         else:
             new_db_mvt_filename = '(Movements not saved)'
+    
+
+    def report_to_excel(self, data: pd.DataFrame, filename: str):
+
+        if isinstance(data, pd.DataFrame):
+            outp_filename = os.path.join(self.reports_path, filename + '.xlsx')
+            data.to_excel(outp_filename, index=False, freeze_panes=(1,0))
+        
+        if isinstance(data, dict):
+            outp_filename = os.path.join(self.reports_path, filename + '.xlsx')
+            with pd.ExcelWriter(outp_filename) as writer:
+                for sheetname, df in data.items():
+                    df.to_excel(writer, sheet_name=sheetname, index=False, freeze_panes=(1,0))
+
