@@ -2,7 +2,7 @@ import argparse
 
 
 def main():
-    from . import utils
+    from product_trailer import core
     from .config import Config
 
     # Arg parser
@@ -21,7 +21,7 @@ def main():
     config = Config(args.profile_name)
 
     # Process files
-    utils.scan_new_input(args.raw_dir, config, prefix_input_files = args.raw_prefix)
+    core.scan_new_input(args.raw_dir, config, prefix_input_files = args.raw_prefix)
     
     # Post-processing
     if not args.no_excel_report:

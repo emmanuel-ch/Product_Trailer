@@ -9,7 +9,7 @@ import os
 _WAYPOINTS_DEF_ = ['Posting Date', 'Company', 'SLOC', 'Sold to', 'Mvt Code', 'Batch']  # Order matters!
 
 
-# LINE_PROFILER
+# Enable # @profiler + Saving at end of process_mvt_file()
 # import line_profiler
 # profiler = line_profiler.LineProfiler()
 
@@ -62,6 +62,7 @@ def process_mvt_file(filepath, config):
     )  # 1 task = 1 SKU
     
     MVT_DB = MVT_DB.loc[MVT_DB['SKU'].isin(tasks_queue)]  # Select the combinations which are interesting
+    MVT_DB['Company_SLOC_Batch'] = MVT_DB['Company'].astype(str) + '-' + MVT_DB['SLOC'].astype(str) + '-' + MVT_DB['Batch']
     list_computed_MVTS = [] # Empty list for now
 
     # Looping through the tasks
@@ -84,10 +85,16 @@ def process_mvt_file(filepath, config):
     config.save_movements(list_computed_MVTS, date_range_db)
     print(f'Done. Input file successfully processed.')
 
-    # profiler.print_stats()  # LINE_PROFILER
+    # For profiling only
+    # import contextlib
+    # with open(f'profile.txt', 'w') as f:
+    #     with contextlib.redirect_stdout(f):
+    #         profiler.print_stats()
+    
     return True
 
 
+# @profiler
 def prep_mvt_tracking_db(new_raw_mvt, config):
     new_mvts = (
         new_raw_mvt
@@ -96,10 +103,11 @@ def prep_mvt_tracking_db(new_raw_mvt, config):
                        *config.input_features['sku_features'], 
                        'Special Stock Ind Code', 'Unit_Value'])
         .assign(QTY_Unallocated = lambda df: df['QTY'].apply(abs))
-        .assign(Items_Allocated = lambda df: df.apply(lambda _: [], result_type='reduce', axis=1))
+        .assign(Items_Allocated = lambda df: df.apply(lambda _: set(), result_type='reduce', axis=1))
     )
     return new_mvts
 
+# @profiler
 def extract_items(raw_mvt, config):
 
     ID_definition = ['Company', 'SLOC', 'Sold to', 'Mvt Code', 'Posting Date', 'SKU', 'Batch']
@@ -137,6 +145,7 @@ def extract_items(raw_mvt, config):
     return trailed_products
 
 
+# @profiler
 def process_items_group(task_items, task_MVTs):
     if len(task_MVTs) == 0:  # No mvt => Skip this
         return task_items, task_MVTs
@@ -150,6 +159,7 @@ def process_items_group(task_items, task_MVTs):
     return df_items_computed, task_MVTs
 
 
+# @profiler
 def compute_route(item: pd.Series, task_MVTs: pd.DataFrame):
 
     list_new_items = compute_hop(item, task_MVTs)
@@ -164,6 +174,7 @@ def compute_route(item: pd.Series, task_MVTs: pd.DataFrame):
     return out
 
 
+# @profiler
 def compute_hop(item: pd.Series, task_MVTs: pd.DataFrame):
 
     this_is_first_step = len(item.Waypoints) == 1
@@ -181,7 +192,7 @@ def compute_hop(item: pd.Series, task_MVTs: pd.DataFrame):
             'Sold to': [item.Waypoints[-1][3]],
             'QTY': [-item.QTY],
             'QTY_Unallocated': [item.QTY],
-            'Items_Allocated': [[]]
+            'Items_Allocated': [set()]
         })
 
     if len(minus_mvts) == 0:  # Nothing found: The product didn't move
@@ -216,7 +227,7 @@ def compute_hop(item: pd.Series, task_MVTs: pd.DataFrame):
 
         if minus_mvt['Mvt Code'] != 'PO':
             task_MVTs.loc[minus_idx, 'QTY_Unallocated'] -= hop_minus_QTY
-            task_MVTs.loc[minus_idx, 'Items_Allocated'].append(item.name)
+            task_MVTs.loc[minus_idx, 'Items_Allocated'].add(item.name)
         
         
         QTY_covered += hop_minus_QTY
@@ -236,6 +247,7 @@ def compute_hop(item: pd.Series, task_MVTs: pd.DataFrame):
     return new_items
 
 
+# @profiler
 def compute_plus_mvts(minus_mvt: pd.Series, desired_QTY: int, task_MVTs: pd.DataFrame, ID: str):
     """Tried to find the [+] mvts: where the product has moved to.
     minus_mvt: Info about the [-] mvt
@@ -258,7 +270,7 @@ def compute_plus_mvts(minus_mvt: pd.Series, desired_QTY: int, task_MVTs: pd.Data
         plus_resolved.append({'qty': addnl_cover_QTY, 'plus_mvt': plus_mvt})
 
         task_MVTs.loc[plus_idx, 'QTY_Unallocated'] -= addnl_cover_QTY
-        task_MVTs.loc[plus_idx, 'Items_Allocated'].append(ID)
+        task_MVTs.loc[plus_idx, 'Items_Allocated'].add(ID)
         
 
         QTY_covered += addnl_cover_QTY
@@ -271,6 +283,7 @@ def compute_plus_mvts(minus_mvt: pd.Series, desired_QTY: int, task_MVTs: pd.Data
     return plus_resolved
     
 
+# @profiler
 def construct_new_item(item: pd.Series, instruction: str, data: dict, sub_ID: bool | str):
     new_item = item.copy(deep=True)
     new_item.Waypoints = item.Waypoints.copy()  # Needed to make a separate copy of the list of Waypoints.
@@ -319,15 +332,14 @@ def construct_new_item(item: pd.Series, instruction: str, data: dict, sub_ID: bo
     return new_item
 
 
+# @profiler
 def find_minus_lines(this_is_first_step, latest_wpt, MVT_DB, ID):
     if not this_is_first_step:
         if latest_wpt[2] == 'NA': # Add filter on SoldTo if SKU is in consignment
             minus1_line = MVT_DB.loc[
                 (MVT_DB['Posting Date'].values >= latest_wpt[0]) & \
-                (MVT_DB['Company'].values == latest_wpt[1]) & \
-                (MVT_DB['SLOC'].values == latest_wpt[2]) & \
+                (MVT_DB['Company_SLOC_Batch'].values == latest_wpt[1] + '-' + latest_wpt[2] + '-' + latest_wpt[5]) & \
                 (MVT_DB['Sold to'].values == latest_wpt[3]) & \
-                (MVT_DB['Batch'].values == latest_wpt[5]) & \
                 (MVT_DB['Items_Allocated'].apply(lambda Item_Allocated: ID not in Item_Allocated)) & \
                 (MVT_DB['QTY'].values <= -1) & \
                 (MVT_DB['QTY_Unallocated'].values >= 1)
@@ -335,9 +347,7 @@ def find_minus_lines(this_is_first_step, latest_wpt, MVT_DB, ID):
         else:
             minus1_line = MVT_DB.loc[
                 (MVT_DB['Posting Date'].values >= latest_wpt[0]) & \
-                (MVT_DB['Company'].values == latest_wpt[1]) & \
-                (MVT_DB['SLOC'].values == latest_wpt[2]) & \
-                (MVT_DB['Batch'].values == latest_wpt[5]) & \
+                (MVT_DB['Company_SLOC_Batch'].values == latest_wpt[1] + '-' + latest_wpt[2] + '-' + latest_wpt[5]) & \
                 (MVT_DB['Items_Allocated'].apply(lambda Item_Allocated: ID not in Item_Allocated)) & \
                 (MVT_DB['QTY'].values <= -1) & \
                 (MVT_DB['QTY_Unallocated'].values >= 1)
@@ -345,10 +355,8 @@ def find_minus_lines(this_is_first_step, latest_wpt, MVT_DB, ID):
     else: # We're looking for the 1st movement of the tracked product
         minus1_line = MVT_DB.loc[
             (MVT_DB['Posting Date'].values == latest_wpt[0]) & \
-            (MVT_DB['Company'].values == latest_wpt[1]) & \
-            (MVT_DB['SLOC'].values == latest_wpt[2]) & \
+            (MVT_DB['Company_SLOC_Batch'].values == latest_wpt[1] + '-' + latest_wpt[2] + '-' + latest_wpt[5]) & \
             (MVT_DB['Sold to'].values == latest_wpt[3]) & \
-            (MVT_DB['Batch'].values == latest_wpt[5]) & \
             (MVT_DB['Mvt Code'].values == latest_wpt[4]) & \
             (MVT_DB['QTY'].values <= -1) & \
             (MVT_DB['QTY_Unallocated'].values >= 1)
@@ -356,6 +364,7 @@ def find_minus_lines(this_is_first_step, latest_wpt, MVT_DB, ID):
     return minus1_line
 
 
+# @profiler
 def find_plus_lines(minus1_line, MVT_DB):  # We start with the exceptions, and the general case is down
     if minus1_line['Mvt Code'] == '956': # Change of SoldTo
         plus1_lines = MVT_DB.loc[
@@ -399,6 +408,7 @@ def find_plus_lines(minus1_line, MVT_DB):  # We start with the exceptions, and t
     return plus1_lines
 
 
+# @profiler
 def find_plus_lines_nobatch(minus1_line, MVT_DB):
     plus1_lines = MVT_DB.loc[
             (MVT_DB['Posting Date'].values == minus1_line['Posting Date']) & \

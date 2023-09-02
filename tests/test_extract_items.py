@@ -2,7 +2,7 @@ import pytest
 import pathlib
 import pandas as pd
 
-from product_trailer.utils import extract_items
+from product_trailer.core import extract_items
 
 @pytest.fixture
 def prep_test_dataset_1():
