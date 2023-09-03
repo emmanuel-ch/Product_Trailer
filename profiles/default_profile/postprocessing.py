@@ -1,3 +1,11 @@
+""" postprocessing.py
+Defines user-defined instructions for postprocessing.
+
+Functions:
+    postprocess
+"""
+
+
 from datetime import datetime
 from itertools import groupby
 import numpy as np
@@ -5,7 +13,7 @@ import pandas as pd
 
 
 
-def postprocess(self, tracked_items: pd.DataFrame):
+def postprocess(self, tracked_items: pd.DataFrame) -> bool:
     TI = tracked_items.copy()
     TI['Route'] = TI['Waypoints'].apply(lambda wpts: ' > '.join(list(map('.'.join, np.array(wpts)[:, 1:3]))))
     TI['DCs'] = TI['Waypoints'].apply(lambda wpts: [i[0] for i in groupby(np.array(wpts)[:,1])])
@@ -49,3 +57,4 @@ def postprocess(self, tracked_items: pd.DataFrame):
     self.report_to_excel({'summary': TI, 'details': detailed_view}, out_filename)
 
     return True
+

@@ -1,6 +1,21 @@
+""" processing.py
+User-customised functions to enable algorithm to work.
+
+Functions:
+    import_movements
+    is_entry_point
+"""
+
+
 import pandas as pd
 
-def import_movements(filepath):
+def import_movements(filepath: str) -> pd.DataFrame:
+    """import_movements - Steps 1, 2, and 3 should be customised to align to user's data:
+    1. Reads a movement file, with dtypes specified in inputcols_dtypes
+    2. Renames columns according to algorithm expectation
+    3. Performs filtering
+    4. Performs sorting - user may change at their own risk
+    """
     
     inputcols_dtypes = {
         'Posting Date': 'datetime64[ns]',
@@ -49,7 +64,9 @@ def import_movements(filepath):
     return raw_mvt[output_cols]
 
 
-def is_entry_point(item: pd.DataFrame | pd.Series):
+def is_entry_point(item: pd.DataFrame | pd.Series) -> bool | pd.Series:
+    """is_entry_point: Defines when to start tracking a product
+    Should be customised regarding needs of user."""
     if isinstance(item, pd.Series):
         return (item['Mvt Code'] in ['632', '932', '956'])  & (item['Special Stock Ind Code'] == 'K')
     return (item['Mvt Code'].isin(['632', '932', '956']))  & (item['Special Stock Ind Code'] == 'K')

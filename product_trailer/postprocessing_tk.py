@@ -1,7 +1,16 @@
+""" postprocessing_tk.py
+Ready-made postprocessing functions.
+
+Functions:
+    make_exportable_hist
+"""
+
+
 import numpy as np
+import pandas as pd
 
 
-def make_exportable_hist(tracked_Items):
+def make_exportable_hist(tracked_Items: pd.DataFrame) -> pd.DataFrame:
     tobe_rtn = (tracked_Items
                 .explode('Waypoints')
                 .reset_index(names='ID')
@@ -18,3 +27,4 @@ def make_exportable_hist(tracked_Items):
     tobe_rtn['Landing_Code'] = tobe_rtn.apply(lambda row: np.nan if row['WaypointNo']==1 else row['Landing_Code'], axis=1)
     
     return tobe_rtn
+

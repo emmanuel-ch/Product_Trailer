@@ -5,13 +5,13 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "returns_analysis",
+            "name": "Standard run",
             "type": "python",
             "request": "launch",
-            "module": "product_trailer",
-            "justMyCode": false,
+            "program": "main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
             "args":  ["returns_analysis"],
-
-        },
+        }
     ]
 }

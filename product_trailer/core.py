@@ -1,4 +1,19 @@
-""" Functions to support main workflow
+""" core.py
+Core functions defining the algorithm.
+
+Functions:
+    scan_new_input
+    process_mvt_file
+    prep_mvt_tracking_db
+    extract_items
+    process_items_group
+    compute_route
+    compute_hop
+    compute_plus_mvts
+    construct_new_item
+    find_minus_lines
+    find_plus_lines
+    find_plus_lines_nobatch
 """
 
 import pandas as pd
@@ -14,10 +29,7 @@ _WAYPOINTS_DEF_ = ['Posting Date', 'Company', 'SLOC', 'Sold to', 'Mvt Code', 'Ba
 # profiler = line_profiler.LineProfiler()
 
 
-def scan_new_input(foldername, config, prefix_input_files=''):
-    import pickle
-
-    
+def scan_new_input(foldername: str, config: str, prefix_input_files: str = '') -> None | pd.DataFrame:
     unprocessed_raw_files = config.find_unprocessed_files(foldername, prefix_input_files)
     print(f'Detected {len(unprocessed_raw_files)} file(s) not processed.')
 
@@ -29,7 +41,7 @@ def scan_new_input(foldername, config, prefix_input_files=''):
     return tracked
 
 
-def process_mvt_file(filepath, config):
+def process_mvt_file(filepath: str, config) -> bool:
     print(f"\n##### Process new movements: {filepath}", end='')
     
     # ############################## PART 1 ##############################
@@ -95,7 +107,7 @@ def process_mvt_file(filepath, config):
 
 
 # @profiler
-def prep_mvt_tracking_db(new_raw_mvt, config):
+def prep_mvt_tracking_db(new_raw_mvt: pd.DataFrame, config) -> pd.DataFrame:
     new_mvts = (
         new_raw_mvt
         .copy()
@@ -108,7 +120,7 @@ def prep_mvt_tracking_db(new_raw_mvt, config):
     return new_mvts
 
 # @profiler
-def extract_items(raw_mvt, config):
+def extract_items(raw_mvt: pd.DataFrame, config) -> pd.DataFrame:
 
     ID_definition = ['Company', 'SLOC', 'Sold to', 'Mvt Code', 'Posting Date', 'SKU', 'Batch']
     company_features = ['Company', *config.input_features['company_features']]
@@ -146,7 +158,7 @@ def extract_items(raw_mvt, config):
 
 
 # @profiler
-def process_items_group(task_items, task_MVTs):
+def process_items_group(task_items: pd.DataFrame, task_MVTs: pd.DataFrame) -> (pd.DataFrame, pd.DataFrame):
     if len(task_MVTs) == 0:  # No mvt => Skip this
         return task_items, task_MVTs
     
@@ -160,7 +172,7 @@ def process_items_group(task_items, task_MVTs):
 
 
 # @profiler
-def compute_route(item: pd.Series, task_MVTs: pd.DataFrame):
+def compute_route(item: pd.Series, task_MVTs: pd.DataFrame) -> list:
 
     list_new_items = compute_hop(item, task_MVTs)
 
@@ -175,7 +187,7 @@ def compute_route(item: pd.Series, task_MVTs: pd.DataFrame):
 
 
 # @profiler
-def compute_hop(item: pd.Series, task_MVTs: pd.DataFrame):
+def compute_hop(item: pd.Series, task_MVTs: pd.DataFrame) -> list:
 
     this_is_first_step = len(item.Waypoints) == 1
 
@@ -248,7 +260,7 @@ def compute_hop(item: pd.Series, task_MVTs: pd.DataFrame):
 
 
 # @profiler
-def compute_plus_mvts(minus_mvt: pd.Series, desired_QTY: int, task_MVTs: pd.DataFrame, ID: str):
+def compute_plus_mvts(minus_mvt: pd.Series, desired_QTY: int, task_MVTs: pd.DataFrame, ID: str) -> list:
     """Tried to find the [+] mvts: where the product has moved to.
     minus_mvt: Info about the [-] mvt
     desired_QTY: the quantity we track
@@ -284,7 +296,7 @@ def compute_plus_mvts(minus_mvt: pd.Series, desired_QTY: int, task_MVTs: pd.Data
     
 
 # @profiler
-def construct_new_item(item: pd.Series, instruction: str, data: dict, sub_ID: bool | str):
+def construct_new_item(item: pd.Series, instruction: str, data: dict, sub_ID: bool | str) -> pd.Series:
     new_item = item.copy(deep=True)
     new_item.Waypoints = item.Waypoints.copy()  # Needed to make a separate copy of the list of Waypoints.
     # Note the waypoints themselves still link to the same memory space. copy.deepcopy() would solve this, if this was an issue.
@@ -333,7 +345,7 @@ def construct_new_item(item: pd.Series, instruction: str, data: dict, sub_ID: bo
 
 
 # @profiler
-def find_minus_lines(this_is_first_step, latest_wpt, MVT_DB, ID):
+def find_minus_lines(this_is_first_step: bool, latest_wpt: list, MVT_DB: pd.DataFrame, ID: str) -> pd.DataFrame:
     if not this_is_first_step:
         if latest_wpt[2] == 'NA': # Add filter on SoldTo if SKU is in consignment
             minus1_line = MVT_DB.loc[
@@ -365,7 +377,7 @@ def find_minus_lines(this_is_first_step, latest_wpt, MVT_DB, ID):
 
 
 # @profiler
-def find_plus_lines(minus1_line, MVT_DB):  # We start with the exceptions, and the general case is down
+def find_plus_lines(minus1_line: pd.Series, MVT_DB: pd.DataFrame) -> pd.DataFrame:  # We start with the exceptions, and the general case is down
     if minus1_line['Mvt Code'] == '956': # Change of SoldTo
         plus1_lines = MVT_DB.loc[
             (MVT_DB['Posting Date'].values == minus1_line['Posting Date']) & \
@@ -409,7 +421,7 @@ def find_plus_lines(minus1_line, MVT_DB):  # We start with the exceptions, and t
 
 
 # @profiler
-def find_plus_lines_nobatch(minus1_line, MVT_DB):
+def find_plus_lines_nobatch(minus1_line: pd.Series, MVT_DB: pd.DataFrame) -> pd.DataFrame:
     plus1_lines = MVT_DB.loc[
             (MVT_DB['Posting Date'].values == minus1_line['Posting Date']) & \
             (MVT_DB['Company'].values == minus1_line['Company']) & \

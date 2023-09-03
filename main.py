@@ -1,9 +1,14 @@
+#!/usr/bin/env python
+""" __main__.py
+Called upon starting program.
+"""
+
 import argparse
 
 
-def main():
+def main() -> None:
     from product_trailer import core
-    from .config import Config
+    from product_trailer.config import Config
 
     # Arg parser
     parser = argparse.ArgumentParser(

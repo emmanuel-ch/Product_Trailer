@@ -1,4 +1,18 @@
-"""Configuration class"""
+""" config.py
+Defines class Config: Manager of all interactions between user-profile (the config) and the main program.
+
+Class Config - methods:
+    .__init__
+    .import_config
+    .postprocess
+    .find_unprocessed_files
+    .record_inputfile_processed
+    .fetch_saved_items
+    .save_items
+    .save_movements
+    .report_to_excel
+"""
+
 import os
 import shutil
 import tomllib
@@ -7,7 +21,7 @@ import pandas as pd
 
 class Config():
 
-    def __init__(self, config_name) -> None:
+    def __init__(self, config_name: str) -> None:
         self.profile_name = config_name
         self.profile_path = os.path.join('profiles', self.profile_name)
         self.config_path = os.path.join('profiles', self.profile_name, 'config.toml')
@@ -15,7 +29,7 @@ class Config():
         self.import_config()
 
 
-    def import_config(self):
+    def import_config(self) -> bool:
         # Copy default config if none exists
         if not os.path.isdir(self.profile_path):
             shutil.copytree('./profiles/default_profile/', self.profile_path)
@@ -35,19 +49,19 @@ class Config():
         self.input_features = imported_config['input_data']
 
         # Custom tools
-        custom_tools = importlib.import_module(f'profiles.{self.profile_name}.custom_tools')
-        self.import_movements = custom_tools.import_movements
-        self.is_entry_point = custom_tools.is_entry_point
+        processing = importlib.import_module(f'profiles.{self.profile_name}.processing')
+        self.import_movements = processing.import_movements
+        self.is_entry_point = processing.is_entry_point
         return True
     
 
-    def postprocess(self, tracked_items):
+    def postprocess(self, tracked_items: pd.DataFrame) -> bool:
         custom_postprocessing = importlib.import_module(f'profiles.{self.profile_name}.postprocessing')
         custom_postprocessing.postprocess(self, tracked_items)
         return True
 
     
-    def find_unprocessed_files(self, foldername, prefix_input_files):
+    def find_unprocessed_files(self, foldername: str, prefix_input_files: str) -> set:
         import os
         import pickle
 
@@ -62,7 +76,7 @@ class Config():
         return sorted(all_raw_files.difference(self.input_files_processed))
     
 
-    def record_inputfile_processed(self, filename):
+    def record_inputfile_processed(self, filename: str) -> None:
         import pickle
 
         self.input_files_processed.add(filename)
@@ -71,7 +85,7 @@ class Config():
             pickle.dump(self.input_files_processed, f)
     
 
-    def fetch_saved_items(self):
+    def fetch_saved_items(self) -> None | pd.DataFrame:
         import os
         import pandas as pd
 
@@ -86,7 +100,7 @@ class Config():
             return pd.read_pickle(self.item_db_filepath)
         
     
-    def save_items(self, tracked_items, date_range_db):
+    def save_items(self, tracked_items: pd.DataFrame, date_range_db: str) -> None:
         import os
         from datetime import datetime
 
@@ -104,7 +118,7 @@ class Config():
         self.item_db_filepath = new_db_filename
     
 
-    def save_movements(self, list_computed_MVTS, date_range_db):
+    def save_movements(self, list_computed_MVTS: pd.DataFrame, date_range_db: str) -> None:
         import os
         import pandas as pd
         from datetime import datetime
@@ -136,7 +150,7 @@ class Config():
             new_db_mvt_filename = '(Movements not saved)'
     
 
-    def report_to_excel(self, data: pd.DataFrame, filename: str):
+    def report_to_excel(self, data: pd.DataFrame, filename: str) -> None:
 
         if isinstance(data, pd.DataFrame):
             outp_filename = os.path.join(self.reports_path, filename + '.xlsx')
