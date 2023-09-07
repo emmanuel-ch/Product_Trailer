@@ -27,7 +27,7 @@ def postprocess(self, tracked_items: pd.DataFrame) -> bool:
     # Save to Excel
     date_range = std_report['Return_Date'].min()+ ".." + std_report['Return_Date'].max()
     dt_now = datetime.today().strftime("%Y-%m-%d %Hh%M")
-    out_filename = f'Returns -- Saved {dt_now} -- Range {date_range}.xlsx'
+    out_filename = f'Tracked products -- Saved {dt_now} -- Range {date_range}.xlsx'
     self.report_to_excel({'summary': std_report, 'details': detailed_view}, out_filename)
 
     return True
