@@ -8,7 +8,7 @@ import argparse
 
 def main() -> None:
     from product_trailer import core
-    from product_trailer.config import Config
+    from product_trailer.config import validate_configname, Config
 
     # Arg parser
     parser = argparse.ArgumentParser(
@@ -23,17 +23,20 @@ def main() -> None:
     print('\n\n', ' PRODUCT-TRAILER '.center(80, '#'), sep='')
 
     # Configuration
-    config = Config(args.profile_name)
+    if not validate_configname(args.profile_name):
+        print('Profile name not valid. Characters allowed (max 30): a-z, A-Z, 0-9, -_.,()')
+    else:
+        config = Config(args.profile_name)
 
-    # Process files
-    core.scan_new_input(args.raw_dir, config, prefix_input_files = args.raw_prefix)
-    
-    # Post-processing
-    if not args.no_excel_report:
-        print('\nPost-processing... ', end='')
-        tracked_items = config.fetch_saved_items()
-        config.postprocess(tracked_items)
-        print('Finished.')
+        # Process files
+        core.scan_new_input(args.raw_dir, config, prefix_input_files = args.raw_prefix)
+        
+        # Post-processing
+        if not args.no_excel_report:
+            print('\nPost-processing... ', end='')
+            tracked_items = config.fetch_saved_items()
+            config.postprocess(tracked_items)
+            print('Finished.')
     
     # End of program
     print('\n' + ' Program finished '.center(80, '#'), end='\n\n\n')

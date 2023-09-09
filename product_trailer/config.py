@@ -13,6 +13,7 @@ Class Config - methods:
     .report_to_excel
 """
 
+import string
 import shutil
 import tomllib
 import importlib
@@ -20,6 +21,15 @@ from datetime import datetime
 from pathlib import Path
 import pickle
 import pandas as pd
+
+
+
+def validate_configname(config_name: str) -> bool:
+    valid_chars = "-_.,()" + string.ascii_letters + string.digits
+    acceptable_name = ''.join(char for char in config_name if char in valid_chars)
+    return (config_name == acceptable_name) and (len(config_name) > 0) and (len(config_name) < 30)
+
+
 
 class Config():
 
