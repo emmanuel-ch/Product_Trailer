@@ -25,16 +25,31 @@ def postprocess(self, tracked_items: pd.DataFrame) -> bool:
 
 
     # Save to Excel
-    date_range = std_report['Return_Date'].min()+ ".." + std_report['Return_Date'].max()
+    date_range = (
+        std_report['Return_Date'].min() 
+        + ".."
+        + std_report['Return_Date'].max()
+    )
     dt_now = datetime.today().strftime("%Y-%m-%d %Hh%M")
-    out_filename = f'Tracked products -- Saved {dt_now} -- Range {date_range}.xlsx'
-    self.report_to_excel({'summary': std_report, 'details': detailed_view}, out_filename)
+    out_filename = (
+        f'Tracked products',
+        f'-- Saved {dt_now}',
+        f'-- Range {date_range}.xlsx'
+    )
+    self.report_to_excel(
+        {'summary': std_report, 'details': detailed_view},
+        out_filename
+        )
 
     return True
 
 
 def customize_std_report(tracked_Items: pd.DataFrame) -> pd.DataFrame:
     TI = tracked_Items.copy(deep=True)
-    TI['Num_Returns'] = TI['Waypoints'].apply(lambda wpts: np.count_nonzero(np.isin(np.array(wpts).flatten(), ['632', '932', '956/955'])))
+    TI['Num_Returns'] = TI['Waypoints'].apply(
+        lambda wpts: np.count_nonzero(np.isin(
+            np.array(wpts).flatten(),
+            ['632', '932', '956/955']
+            )))
     return TI
     
