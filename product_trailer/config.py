@@ -124,10 +124,12 @@ class Config():
     def save_items(self, tracked_items: pd.DataFrame,
                    date_range_db: str) -> None:
         datetime_db_creation = datetime.today().strftime("%Y-%m-%d %Hh%M")
-        new_db_filename = self.database_path/(
-            f"{self.db_config['filename_tracked_items']} {date_range_db} ",
-            f"(saved {datetime_db_creation}).pkl"
+        filename = (
+            f"{self.db_config['filename_tracked_items']} {date_range_db} "
+            + f"(saved {datetime_db_creation}).pkl"
         )
+        new_db_filename = self.database_path / filename
+        
         tracked_items.to_pickle(new_db_filename)
         
         if self.db_config['only_keep_latest_version']:
@@ -151,10 +153,11 @@ class Config():
                     ], axis=0)
             
             datetime_db_creation = datetime.today().strftime("%Y-%m-%d %Hh%M")
-            new_db_mvt_filepath = self.database_path/(
-                f"{self.db_config['filename_movements']} {date_range_db}",
-                f"(saved {datetime_db_creation}).pkl"
+            filename = (
+                f"{self.db_config['filename_movements']} {date_range_db}"
+                + f"(saved {datetime_db_creation}).pkl"
             )
+            new_db_mvt_filepath = self.database_path / filename
             new_MVT_DB.to_pickle(new_db_mvt_filepath)
             
             if self.db_config['only_keep_latest_version']:

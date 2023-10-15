@@ -361,8 +361,8 @@ def construct_new_item(item: pd.Series,
             new_item.Open = np.nan
             new_wpt = data['minus_mvt'][_WAYPOINTS_DEF_].tolist()
             new_wpt[2] = (
-                f"PO FROM {data['minus_mvt']['SLOC']}, ",
-                f"mvt {data['minus_mvt']['Mvt Code']}"
+                f"PO FROM {data['minus_mvt']['SLOC']},"
+                + f"mvt {data['minus_mvt']['Mvt Code']}"
             )
             new_wpt[4] = data['minus_mvt']['PO']
         else:

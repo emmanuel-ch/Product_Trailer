@@ -32,9 +32,9 @@ def postprocess(self, tracked_items: pd.DataFrame) -> bool:
     )
     dt_now = datetime.today().strftime("%Y-%m-%d %Hh%M")
     out_filename = (
-        f'Tracked products',
-        f'-- Saved {dt_now}',
-        f'-- Range {date_range}.xlsx'
+        f'Tracked products'
+        + f'-- Saved {dt_now}'
+        + f'-- Range {date_range}.xlsx'
     )
     self.report_to_excel(
         {'summary': std_report, 'details': detailed_view},
