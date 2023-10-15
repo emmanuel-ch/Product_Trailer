@@ -25,20 +25,6 @@ _WAYPOINTS_DEF_ = ['Posting Date', 'Company', 'SLOC', 'Sold to',
                    'Mvt Code', 'Batch']  # Order matters!
 
 
-def scan_new_input(foldername: str, config: str,
-                   prefix_input_files: str = '') -> None | pd.DataFrame:
-    unprocessed_raw_files = config.find_unprocessed_files(foldername,
-                                                          prefix_input_files)
-    print(f'Detected {len(unprocessed_raw_files)} file(s) not processed.')
-
-    tracked = None
-    for input_filepath in unprocessed_raw_files:
-        tracked = process_mvt_file(input_filepath, config)
-        config.record_inputfile_processed(input_filepath)
-
-    return tracked
-
-
 def process_mvt_file(filepath: str, config) -> bool:
     print(f"\n##### Process new movements: {filepath}", end='')
     
@@ -63,7 +49,7 @@ def process_mvt_file(filepath: str, config) -> bool:
               f' = Total {tracked_items.shape[0]}')
     
     # ############################## PART 2 ##############################
-    # 2 stacks: items to be processed, and items processed
+    # 2 stacks: items to be processed, and items closed (no processing needed)
     Items_open = tracked_items.loc[tracked_items['Open'].fillna(True)].copy()
     list_computed_items = [
         tracked_items.loc[~tracked_items['Open'].fillna(True)].copy()
@@ -354,7 +340,7 @@ def construct_new_item(item: pd.Series,
             new_wpt = data['minus_mvt'][_WAYPOINTS_DEF_].tolist()
             new_wpt[2] = f"BURNT {data['minus_mvt']['SLOC']}"
         elif data['plus_mvt'] == 'PO2ndPartMissing':
-            if data['minus_mvt']['SLOC'][:7] == 'PO FROM':
+            if data['minus_mvt']['SLOC'].startswith('PO FROM'):
                 # Don't add a waypoint if we haven't found 2nd part of the PO 
                 # for 2+ times in a row
                 return new_item

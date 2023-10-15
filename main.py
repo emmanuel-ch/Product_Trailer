@@ -33,9 +33,15 @@ def main() -> None:
     else:
         config = Config(args.profile_name)
 
-        # Process files
-        core.scan_new_input(args.raw_dir, config,
-                            prefix_input_files = args.raw_prefix)
+        # Find unprocessed files
+        unprocessed_raw_files = config.find_unprocessed_files(
+            args.raw_dir,
+            args.raw_prefix
+        )
+        print(f'Detected {len(unprocessed_raw_files)} file(s) not processed.')
+        for input_filepath in unprocessed_raw_files:
+            core.process_mvt_file(input_filepath, config)
+            config.record_inputfile_processed(input_filepath)
         
         # Post-processing
         if not args.no_excel_report:
