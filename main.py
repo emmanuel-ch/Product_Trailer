@@ -12,7 +12,6 @@ def main() -> None:
 
     # Arg parser
     parser = argparse.ArgumentParser(
-        prog = 'Product-Trailer',
         description = (
             'Tracking products through supply-chain network',
             'by using product movement logs.'
