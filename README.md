@@ -73,8 +73,12 @@ Non-standard packages used:
 - openpyxl
 - numpy
 - pandas
+- python=3.11
 - tqdm
 - pytest
+- line_profiler
+- networkx
+- matplotlib
 
 
 ## Contributing

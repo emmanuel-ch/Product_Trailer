@@ -34,8 +34,6 @@ def process_mvt_file(filepath: str, config) -> bool:
     max_MVT_date = MVT_DB['Posting Date'].max().strftime("%Y-%m-%d")
     print(f' [x{MVT_DB.shape[0]}]')
 
-    # FIXME: Program doesn't prevent opening a database that contains movements
-    # that we already covered
     print('Preparing items... ', end='')
     new_tracked_items = extract_items(new_raw_mvt, config)
     saved_items = config.fetch_saved_items()
@@ -65,8 +63,8 @@ def process_mvt_file(filepath: str, config) -> bool:
     # Prepare movements that will be used
     MVT_DB = MVT_DB.loc[MVT_DB['SKU'].isin(tasks_queue)]
     MVT_DB['Company_SLOC_Batch'] = (
-        MVT_DB['Company'].astype(str) 
-        + '-'+ MVT_DB['SLOC'].astype(str) 
+        MVT_DB['Company'].astype(str)
+        + '-'+ MVT_DB['SLOC'].astype(str)
         + '-' + MVT_DB['Batch']
     )
     list_computed_MVTS = [] # Empty list for now

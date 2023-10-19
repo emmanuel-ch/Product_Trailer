@@ -23,7 +23,6 @@ def postprocess(self, tracked_items: pd.DataFrame) -> bool:
     # Make a detailed view of the route (1 line per tracked item)
     detailed_view = postprocessing_tk.make_exportable_hist(tracked_items)
 
-
     # Save to Excel
     date_range = (
         std_report['Return_Date'].min() 
@@ -40,8 +39,21 @@ def postprocess(self, tracked_items: pd.DataFrame) -> bool:
         {'summary': std_report, 'details': detailed_view},
         out_filename
         )
-
-    return True
+    
+    # Generate network diagram
+    stock_move = postprocessing_tk.collect_stock_move(
+        tracked_items[['QTY', 'Waypoints']],
+        'company'
+        )
+    out_filename = (
+        f'Network mapping'
+        + f'-- Saved {dt_now}'
+        + f'-- Range {date_range}.png'
+    )
+    postprocessing_tk.generate_stock_move_map(
+        stock_move,
+        out_filename
+        )
 
 
 def customize_std_report(tracked_Items: pd.DataFrame) -> pd.DataFrame:
