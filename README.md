@@ -3,6 +3,9 @@ This software provides insights about the journey taken by products throughout n
 
 If you ever wondered "Where was this product sourced from?" or "Have products returned from this customer been scrapped?", then this software is what you need. To make it work, all you need is to provide an extract log of all movements registered on your system, and PT will take care of the rest.
 
+Network diagram generated:
+![Network diagram generated](/assets/Example_Network_diagram.png)  
+
 
 ## Framework & Usage
 
@@ -49,7 +52,7 @@ By default, output files are recorded at the root of your profile: ./profiles/yo
 
 Example output:
 ![Example output](/assets/Example_output.png)  
-An example output file is available at in /assets/
+An example output file is available in /assets/
 
 
 ## Installation and setup
