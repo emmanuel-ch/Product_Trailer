@@ -82,7 +82,7 @@ def make_exportable_hist(tracked_Items: pd.DataFrame) -> pd.DataFrame:
     return tobe_rtn
 
 
-def collect_stock_move(df, node_level):
+def collect_stock_move(df: pd.DataFrame, node_level: str) -> dict:
     stock_move = dict()
     def node_name(wpt, node_level):
             if node_level == 'company':
@@ -109,7 +109,8 @@ def collect_stock_move(df, node_level):
     return stock_move
 
 
-def generate_stock_move_map(stock_move, fname, max_edge_width=4):
+def generate_stock_move_diagram(stock_move: dict,
+                            max_edge_width: int=4) -> plt.figure:
     G = nx.DiGraph()
     edges =  [item for item in stock_move.values()]
     G.add_weighted_edges_from(edges)
@@ -143,5 +144,5 @@ def generate_stock_move_map(stock_move, fname, max_edge_width=4):
                             bbox={"fc": "white", "alpha": 0.5, 'pad': 3,
                                   'boxstyle': 'Round, pad=0.2',
                                   'edgecolor':'none'})
+    return fig
 
-    plt.savefig(fname, format='png')

@@ -22,7 +22,7 @@ from datetime import datetime
 from pathlib import Path
 import pickle
 import pandas as pd
-
+import matplotlib.pyplot as plt
 
 
 def validate_configname(config_name: str) -> bool:
@@ -168,15 +168,19 @@ class Config():
             new_db_mvt_filepath = '(Movements not saved)'
     
 
-    def report_to_excel(self, data: pd.DataFrame, filename: str) -> None:
-        outp_filename = self.reports_path / filename
+    def report_to_excel(self, data: pd.DataFrame, fname: str) -> None:
+        fpath = self.reports_path / fname
 
         if isinstance(data, pd.DataFrame):
-            data.to_excel(outp_filename, index=False, freeze_panes=(1,0))
+            data.to_excel(fpath, index=False, freeze_panes=(1,0))
         
         if isinstance(data, dict):
-            with pd.ExcelWriter(outp_filename) as writer:
+            with pd.ExcelWriter(fpath) as writer:
                 for sheetname, df in data.items():
                     df.to_excel(writer, sheet_name=sheetname,
                                 index=False, freeze_panes=(1,0))
+
+    def save_figure(self, figure: plt.figure, fname: str) -> None:
+        fpath = self.reports_path / fname
+        figure.savefig(fpath, format='png')
 
