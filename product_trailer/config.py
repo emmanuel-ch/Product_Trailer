@@ -121,12 +121,10 @@ class Config():
             return pd.read_pickle(self.item_db_filepath)
         
     
-    def save_items(self, tracked_items: pd.DataFrame,
-                   date_range_db: str) -> None:
-        datetime_db_creation = datetime.today().strftime("%Y-%m-%d %Hh%M")
+    def save_items(self, tracked_items: pd.DataFrame) -> None:
+        datetime_db = datetime.today().strftime("%Y-%m-%d %Hh%M")
         filename = (
-            f"{self.db_config['filename_tracked_items']} {date_range_db} "
-            + f"(saved {datetime_db_creation}).pkl"
+            f"{self.db_config['filename_tracked_items']} {datetime_db}.pkl"
         )
         new_db_filename = self.database_path / filename
         
@@ -138,8 +136,7 @@ class Config():
         self.item_db_filepath = new_db_filename
     
 
-    def save_movements(self, list_computed_MVTS: pd.DataFrame,
-                       date_range_db: str) -> None:
+    def save_movements(self, list_computed_MVTS: pd.DataFrame) -> None:
         if self.db_config['save_movements']:
             MVT_DB = pd.concat(list_computed_MVTS, axis=0)
             possible_mvt_db = list(self.database_path.glob(self.db_config['filename_movements']+'*'))
@@ -152,10 +149,9 @@ class Config():
                     pd.read_pickle(prev_dbfilename_MVTS), MVT_DB
                     ], axis=0)
             
-            datetime_db_creation = datetime.today().strftime("%Y-%m-%d %Hh%M")
+            datetime_db = datetime.today().strftime("%Y-%m-%d %Hh%M")
             filename = (
-                f"{self.db_config['filename_movements']} {date_range_db}"
-                + f"(saved {datetime_db_creation}).pkl"
+                f"{self.db_config['filename_movements']} {datetime_db}.pkl"
             )
             new_db_mvt_filepath = self.database_path / filename
             new_MVT_DB.to_pickle(new_db_mvt_filepath)

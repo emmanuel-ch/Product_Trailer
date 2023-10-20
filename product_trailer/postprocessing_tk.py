@@ -4,6 +4,8 @@ Ready-made postprocessing functions.
 Functions:
     make_standard_report
     make_exportable_hist
+    collect_stock_move
+    generate_stock_move_diagram
 """
 
 
@@ -25,11 +27,15 @@ def make_standard_report(tracked_Items: pd.DataFrame) -> pd.DataFrame:
     TI['DCs'] = TI['Waypoints'].apply(
         lambda wpts: [i[0] for i in groupby(np.array(wpts)[:,1])]
         )
-
+    
+    TI['Return_Date'] = TI['Waypoints'].apply(lambda wpts: wpts[0][0])
     TI['Return_Month'] = TI['Return_Date'].dt.strftime('%Y/%m').astype(str)
 
+    TI['First_Company'] = TI['Waypoints'].apply(lambda wpts: wpts[0][1])
     TI['Last_Company'] = TI['Waypoints'].apply(lambda wpts: wpts[-1][1])
+    TI['First_SLOC'] = TI['Waypoints'].apply(lambda wpts: wpts[0][2])
     TI['Last_SLOC'] = TI['Waypoints'].apply(lambda wpts: wpts[-1][2])
+    TI['First_SoldTo'] = TI['Waypoints'].apply(lambda wpts: wpts[0][3])
     TI['Last_Mvt'] = TI['Waypoints'].apply(lambda wpts: wpts[-1][4])
 
     TI['Num_Steps'] = TI['Waypoints'].apply(len) -1

@@ -75,7 +75,7 @@ def process_mvt_file(filepath: str, config) -> bool:
 
         task_Items_open = Items_open.loc[(Items_open['SKU'] == task)].copy()
         task_Movements = MVT_DB.loc[(MVT_DB['SKU'] == task)].copy()
-        out_items, out_MVTs = process_items_group(task_Items_open,
+        out_items, out_MVTs = process_item_group(task_Items_open,
                                                   task_Movements)
         list_computed_items.append(out_items)
         if config.db_config['save_movements']:
@@ -85,10 +85,8 @@ def process_mvt_file(filepath: str, config) -> bool:
     
     # ############################## PART 3 ##############################
     print(f'Saving {tracked_items.shape[0]} items... ', end='')
-    date_range_db = (tracked_items['Return_Date'].min().strftime("%Y-%m-%d") 
-                     + "..." + max_MVT_date)
-    config.save_items(tracked_items, date_range_db)
-    config.save_movements(list_computed_MVTS, date_range_db)
+    config.save_items(tracked_items)
+    config.save_movements(list_computed_MVTS)
     print(f'Done. Input file successfully processed.')
     
     return True
@@ -139,25 +137,23 @@ def extract_items(raw_mvt: pd.DataFrame, config) -> pd.DataFrame:
                .reset_index()[sku_features]
                .drop_duplicates(keep='first'), on='SKU')
         .set_index('ID')
-        .assign(Open = True)
-        .assign(QTY = lambda df: -df['QTY'])
-        .assign(Waypoints = lambda df: df.apply(
-            lambda row: [row[_WAYPOINTS_DEF_].values.tolist()], axis=1)
+        .assign(Open = True,
+                QTY = lambda df: -df['QTY'],
+                Waypoints = lambda df: df.apply(
+                    lambda row: [row[_WAYPOINTS_DEF_].values.tolist()],
+                    axis=1
+                    )
         )
         .rename(columns={
-            'Posting Date': 'Return_Date',
-            'Country': 'First_Country',
-            'Company': 'First_Company',
-            'SLOC': 'First_SLOC',
-            'Sold to': 'First_Soldto',
-            'Batch': 'First_Batch'
-        })
+            'Country': 'First_Country'
+            })
+        [['First_Country', 'SKU', 'QTY', 'Open', 'Waypoints',
+          'Unit_Value', 'Brand', 'Category']]
     )
-
     return trailed_products
 
 
-def process_items_group(
+def process_item_group(
         task_items: pd.DataFrame,
         task_MVTs: pd.DataFrame
     ) -> (pd.DataFrame, pd.DataFrame):
