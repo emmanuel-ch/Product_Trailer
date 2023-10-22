@@ -25,16 +25,11 @@ _WAYPOINTS_DEF_ = ['Posting Date', 'Company', 'SLOC', 'Sold to',
                    'Mvt Code', 'Batch']  # Order matters!
 
 
-def process_mvt_file(filepath: str, config) -> bool:
-    print(f"\n##### Process new movements: {filepath}", end='')
-    
+def process_new(new_raw_mvt: str, config) -> bool:
     # ############################## PART 1 ##############################
-    new_raw_mvt = config.import_movements(filepath)
     MVT_DB = prep_mvt_tracking_db(new_raw_mvt, config)
-    max_MVT_date = MVT_DB['Posting Date'].max().strftime("%Y-%m-%d")
-    print(f' [x{MVT_DB.shape[0]}]')
+    print(f' [x{MVT_DB.shape[0]}] Preparing items... ', end='')
 
-    print('Preparing items... ', end='')
     new_tracked_items = extract_items(new_raw_mvt, config)
     saved_items = config.fetch_saved_items()
     if isinstance(saved_items, pd.DataFrame):
@@ -63,9 +58,10 @@ def process_mvt_file(filepath: str, config) -> bool:
     # Prepare movements that will be used
     MVT_DB = MVT_DB.loc[MVT_DB['SKU'].isin(tasks_queue)]
     MVT_DB['Company_SLOC_Batch'] = (
-        MVT_DB['Company'].astype(str)
-        + '-'+ MVT_DB['SLOC'].astype(str)
-        + '-' + MVT_DB['Batch']
+        MVT_DB[['Company', 'SLOC', 'Batch']].apply(
+            lambda row: '-'.join(row),
+            axis=1
+        )
     )
     list_computed_MVTS = [] # Empty list for now
 
