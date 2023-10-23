@@ -38,9 +38,11 @@ def main() -> None:
             args.raw_prefix
         )
         print(f'Detected {len(unprocessed_raw_files)} file(s) not processed.')
-        for input_filepath in unprocessed_raw_files:
-            core.process_mvt_file(input_filepath, config)
-            config.record_inputfile_processed(input_filepath)
+        for fpath in unprocessed_raw_files:
+            print(f"\n##### Process new movements: {fpath}", end='')
+            new_raw_mvt = config.import_movements(fpath)
+            core.process_new(new_raw_mvt, config)
+            config.record_inputfile_processed(fpath)
         
         # Post-processing
         if not args.no_excel_report:

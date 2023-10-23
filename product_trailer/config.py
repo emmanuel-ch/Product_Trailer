@@ -2,6 +2,7 @@
 Defines class Config: Manager of all interactions between user-profile
 (the config) and the main program.
 
+validate_configname
 Class Config - methods:
     .__init__
     .import_config
@@ -43,47 +44,43 @@ class Config():
     def __init__(self, config_name: str) -> None:
         self.profile_name = config_name
         self.profile_path = Path('profiles') / self.profile_name
+        defaultpr_path = Path('./product_trailer/default_profile/')
+
         self.database_path = self.profile_path / 'database'
-        self.config_path = self.profile_path / 'config'
-        self.import_config()
-
-
-    def import_config(self) -> bool:
-        # Copy default config if none exists
-        default = './profiles/default_profile/'
-        if not self.profile_path.is_dir():
-            shutil.copytree(default, self.profile_path)
         if not self.database_path.is_dir():
-            shutil.copytree(default + 'database', self.profile_path/'database')
+            self.database_path.mkdir(parents=True)
+        
+        self.config_path = self.profile_path / 'config'
+        self.custom_modules = f'profiles.{self.profile_name}.config'
         if not self.config_path.is_dir():
-            shutil.copytree(default + 'config', self.profile_path/'config')
+            self.config_path = defaultpr_path / 'config'
+            self.custom_modules = f'product_trailer.default_profile.config'
 
         # Import config parameters
         with open(self.config_path / 'config.toml', mode="rb") as fp:
-            imported_config = tomllib.load(fp)
-        self.db_config = imported_config['database']
-        self.files_processed_dbpath = self.database_path/imported_config['database']['filename_files_processed']
+            cfg = tomllib.load(fp)
+        self.db_config = cfg['database']
+        self.files_processed_dbpath = self.database_path/cfg['database']['filename_files_processed']
 
         # Report path setup
-        self.reports_path = self.profile_path/imported_config['database']['reports_path']
+        self.reports_path = self.profile_path/cfg['database']['reports_path']
         if not self.reports_path.is_dir():
             self.reports_path.mkdir(parents=True, exist_ok=True)
         
         # Custom features in input file
-        self.input_features = imported_config['input_data']
+        self.input_features = cfg['input_data']
 
         # Custom tools
         processing = importlib.import_module(
-            f'profiles.{self.profile_name}.config.processing'
+            self.custom_modules + '.processing'
             )
         self.import_movements = processing.import_movements
         self.is_entry_point = processing.is_entry_point
-        return True
     
 
     def postprocess(self, tracked_items: pd.DataFrame) -> bool:
         custom_postprocessing = importlib.import_module(
-            f'profiles.{self.profile_name}.config.postprocessing'
+            self.custom_modules + '.postprocessing'
             )
         custom_postprocessing.postprocess(self, tracked_items)
         return True
