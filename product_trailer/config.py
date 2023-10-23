@@ -16,7 +16,6 @@ Class Config - methods:
 """
 
 import string
-import shutil
 import tomllib
 import importlib
 from datetime import datetime
@@ -24,6 +23,8 @@ from pathlib import Path
 import pickle
 import pandas as pd
 import matplotlib.pyplot as plt
+
+from product_trailer.user_data import UserData
 
 
 def validate_configname(config_name: str) -> bool:
@@ -44,23 +45,22 @@ class Config():
     def __init__(self, config_name: str) -> None:
         self.profile_name = config_name
         self.profile_path = Path('profiles') / self.profile_name
-        defaultpr_path = Path('./product_trailer/default_profile/')
-
         self.database_path = self.profile_path / 'database'
         if not self.database_path.is_dir():
             self.database_path.mkdir(parents=True)
+
+        self.user_data = UserData(self.database_path)
         
         self.config_path = self.profile_path / 'config'
         self.custom_modules = f'profiles.{self.profile_name}.config'
         if not self.config_path.is_dir():
-            self.config_path = defaultpr_path / 'config'
+            self.config_path = Path('./product_trailer/default_profile/config')
             self.custom_modules = f'product_trailer.default_profile.config'
 
         # Import config parameters
         with open(self.config_path / 'config.toml', mode="rb") as fp:
             cfg = tomllib.load(fp)
         self.db_config = cfg['database']
-        self.files_processed_dbpath = self.database_path/cfg['database']['filename_files_processed']
 
         # Report path setup
         self.reports_path = self.profile_path/cfg['database']['reports_path']
@@ -86,28 +86,25 @@ class Config():
         return True
 
     
-    def find_unprocessed_files(self, foldername: str,
-                               prefix_input_files: str) -> set:
-        if self.files_processed_dbpath.is_file():
-            with open(self.files_processed_dbpath, 'rb') as f:
-                self.input_files_processed = pickle.load(f)
+    def find_unprocessed_files(self, foldername: str, prefix: str) -> set:
+        processedf = self.user_data.fetch()
+        if 'processedf' in processedf.keys():
+            self.raw_processed = set(processedf['processedf'])
         else:
-            self.input_files_processed = set()
+            self.raw_processed = set()
         
-        all_raw_files = set(Path(foldername).glob(prefix_input_files + '*'))
-        return sorted(all_raw_files.difference(self.input_files_processed))
+        all_raw_files = set(map(str, Path(foldername).glob(prefix + '*')))
+        return sorted(all_raw_files.difference(self.raw_processed))
     
 
     def record_inputfile_processed(self, filename: str) -> None:
-        self.input_files_processed.add(filename)
-
-        with open(self.files_processed_dbpath, 'wb') as f:
-            pickle.dump(self.input_files_processed, f)
+        self.raw_processed.add(str(filename))
+        self.user_data.set({'processedf': list(self.raw_processed)})
     
 
     def fetch_saved_items(self) -> None | pd.DataFrame:
         possible_db = list(
-            self.database_path.glob(self.db_config['filename_tracked_items']+'*')
+            self.database_path.glob(self.db_config['fname_tracked_items']+'*')
             )
         if len(possible_db) == 0:
             self.item_db_filepath = ''
@@ -121,7 +118,7 @@ class Config():
     def save_items(self, tracked_items: pd.DataFrame) -> None:
         datetime_db = datetime.today().strftime("%Y-%m-%d %Hh%M")
         filename = (
-            f"{self.db_config['filename_tracked_items']} {datetime_db}.pkl"
+            f"{self.db_config['fname_tracked_items']} {datetime_db}.pkl"
         )
         new_db_filename = self.database_path / filename
         
@@ -136,7 +133,7 @@ class Config():
     def save_movements(self, list_computed_MVTS: pd.DataFrame) -> None:
         if self.db_config['save_movements']:
             MVT_DB = pd.concat(list_computed_MVTS, axis=0)
-            possible_mvt_db = list(self.database_path.glob(self.db_config['filename_movements']+'*'))
+            possible_mvt_db = list(self.database_path.glob(self.db_config['fname_movements']+'*'))
             if len(possible_mvt_db) == 0:
                 new_MVT_DB = MVT_DB
                 prev_dbfilename_MVTS = ''
@@ -148,7 +145,7 @@ class Config():
             
             datetime_db = datetime.today().strftime("%Y-%m-%d %Hh%M")
             filename = (
-                f"{self.db_config['filename_movements']} {datetime_db}.pkl"
+                f"{self.db_config['fname_movements']} {datetime_db}.pkl"
             )
             new_db_mvt_filepath = self.database_path / filename
             new_MVT_DB.to_pickle(new_db_mvt_filepath)

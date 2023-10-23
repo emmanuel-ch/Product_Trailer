@@ -1,7 +1,6 @@
 [database]
-filename_tracked_items = 'Tracked _'
-filename_movements = 'All movements _'
-filename_files_processed = 'input_files_processed.pkl'
+fname_tracked_items = 'Tracked _'
+fname_movements = 'All movements _'
 only_keep_latest_version = true
 save_movements = false
 reports_path = ''
