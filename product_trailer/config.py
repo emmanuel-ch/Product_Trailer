@@ -18,9 +18,7 @@ Class Config - methods:
 import string
 import tomllib
 import importlib
-from datetime import datetime
 from pathlib import Path
-import pickle
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -48,7 +46,7 @@ class Config():
         self.database_path = self.profile_path / 'database'
         if not self.database_path.is_dir():
             self.database_path.mkdir(parents=True)
-
+        
         self.user_data = UserData(self.database_path)
         
         self.config_path = self.profile_path / 'config'
@@ -77,6 +75,11 @@ class Config():
         self.import_movements = processing.import_movements
         self.is_entry_point = processing.is_entry_point
     
+
+    def incr_run_count(self):
+        self.run_count = self.user_data.fetch('run_count', 0) + 1
+        self.user_data.set({'run_count': self.run_count})
+
 
     def postprocess(self, tracked_items: pd.DataFrame) -> bool:
         custom_postprocessing = importlib.import_module(
@@ -116,12 +119,8 @@ class Config():
         
     
     def save_items(self, tracked_items: pd.DataFrame) -> None:
-        datetime_db = datetime.today().strftime("%Y-%m-%d %Hh%M")
-        filename = (
-            f"{self.db_config['fname_tracked_items']} {datetime_db}.pkl"
-        )
+        filename = f"{self.db_config['fname_tracked_items']} {self.run_count}.pkl"
         new_db_filename = self.database_path / filename
-        
         tracked_items.to_pickle(new_db_filename)
         
         if self.db_config['only_keep_latest_version']:
@@ -143,11 +142,8 @@ class Config():
                     pd.read_pickle(prev_dbfilename_MVTS), MVT_DB
                     ], axis=0)
             
-            datetime_db = datetime.today().strftime("%Y-%m-%d %Hh%M")
-            filename = (
-                f"{self.db_config['fname_movements']} {datetime_db}.pkl"
-            )
-            new_db_mvt_filepath = self.database_path / filename
+            fname = f"{self.db_config['fname_movements']} {self.run_count}.pkl"
+            new_db_mvt_filepath = self.database_path / fname
             new_MVT_DB.to_pickle(new_db_mvt_filepath)
             
             if self.db_config['only_keep_latest_version']:

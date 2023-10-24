@@ -6,6 +6,7 @@ Class UserData - methods:
 """
 
 
+from typing import Any
 import json
 
 
@@ -13,11 +14,20 @@ class UserData:
     def __init__(self, dirpath):
         self.datafp = dirpath / 'userdata.json'
     
-    def fetch(self):
+    def fetch(self, item: str | None = None, default_value: Any = None):
         if self.datafp.is_file():
             with open(self.datafp, 'r') as read_file:
-                return json.load(read_file)
-        return {}
+                data = json.load(read_file)
+        else:
+            data = {}
+    
+        if item is None:
+            return data
+        else:
+            if item in data.keys():
+                return data[item]
+            else:
+                return default_value
     
     def set(self, new_data: dict):
         data = self.fetch()

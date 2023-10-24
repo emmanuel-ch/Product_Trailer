@@ -23,22 +23,20 @@ def main() -> None:
                         default=False, action='store_true')
     args = parser.parse_args()
 
-    print('\n\n', ' PRODUCT-TRAILER '.center(80, '#'), sep='')
 
-    # Configuration
+    print('\n\n', ' PRODUCT-TRAILER '.center(80, '#'), sep='')
     if not validate_configname(args.profile_name):
         print('Profile name not valid.',
               'Characters allowed (max 30): a-z, A-Z, 0-9, -_.,()')
     else:
         config = Config(args.profile_name)
-
-        # Find unprocessed files
         unprocessed_raw_files = config.find_unprocessed_files(
             args.raw_dir,
             args.raw_prefix
         )
         print(f'Detected {len(unprocessed_raw_files)} file(s) not processed.')
         for fpath in unprocessed_raw_files:
+            config.incr_run_count()
             print(f"\n##### Process new movements: {fpath}", end='')
             new_raw_mvt = config.import_movements(fpath)
             core.process_new(new_raw_mvt, config)
