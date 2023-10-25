@@ -156,11 +156,10 @@ def process_item_group(
     if len(task_MVTs) == 0:  # No mvt => Skip this
         return task_items, task_MVTs
     
-    # items_computed is a list of pd.Series
-    items_computed = []
+    items_computed = []  # list of pd.Series
     for _, row in task_items.iterrows():
         items_computed.extend(compute_route(row, task_MVTs))
-    df_items_computed = pd.DataFrame(items_computed) 
+    df_items_computed = pd.DataFrame(items_computed)
     
     return df_items_computed, task_MVTs
 
@@ -174,20 +173,18 @@ def compute_route(item: pd.Series, task_MVTs: pd.DataFrame) -> list:
         if item.equals(list_new_items[0]):  # Product didn't travel further
             return [item]
         
-    out =  [
+    return [
         an_item
         for new_item in list_new_items
         for an_item in compute_route(new_item, task_MVTs)
     ]
-    return out
 
 
 def compute_hop(item: pd.Series, task_MVTs: pd.DataFrame) -> list:
-
-    this_is_first_step = len(item.Waypoints) == 1
+    first_step = len(item.Waypoints) == 1
 
     if not np.isnan(item.Open):
-        minus_mvts = find_minus_lines(this_is_first_step, item.Waypoints[-1],
+        minus_mvts = find_minus_lines(first_step, item.Waypoints[-1],
                                       task_MVTs, item.name)
     else:
         minus_mvts = pd.DataFrame({
@@ -204,7 +201,7 @@ def compute_hop(item: pd.Series, task_MVTs: pd.DataFrame) -> list:
         })
 
     if len(minus_mvts) == 0:  # Nothing found: The product didn't move
-        if this_is_first_step:
+        if first_step:
             # DOUBLE-COUNTING PREVENTION
             # If we are here, it means the tracked product passes by an 
             # "entry point". To avoid double-counting, decision was made to 
@@ -214,7 +211,6 @@ def compute_hop(item: pd.Series, task_MVTs: pd.DataFrame) -> list:
         return [item]
     
     new_items = []
-    
     multiple_minuses = -minus_mvts.iloc[0].QTY < item.QTY
     sub_ID_lv1 = 0
     QTY_covered = 0
@@ -347,7 +343,7 @@ def construct_new_item(item: pd.Series,
         new_item.Open = True
 
         if len(new_item.Waypoints) == 1:
-            new_item.Waypoints[0][0] = pd.Timestamp(0)
+            new_item.Waypoints[0][0] = pd.NaT
             new_item.Waypoints[0][4] = ''
 
         new_wpt = data['plus_mvt'][_WAYPOINTS_DEF_].tolist()

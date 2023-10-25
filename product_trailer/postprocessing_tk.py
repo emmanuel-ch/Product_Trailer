@@ -19,47 +19,48 @@ import matplotlib.pyplot as plt
 
 
 
-def make_standard_report(tracked_Items: pd.DataFrame) -> pd.DataFrame:
-    TI = tracked_Items.copy(deep=True)
-    TI['Route'] = TI['Waypoints'].apply(
-        lambda wpts: ' > '.join(list(map('.'.join, np.array(wpts)[:, 1:3])))
-        )
-    TI['DCs'] = TI['Waypoints'].apply(
-        lambda wpts: [i[0] for i in groupby(np.array(wpts)[:,1])]
-        )
-    
-    TI['Return_Date'] = TI['Waypoints'].apply(lambda wpts: wpts[0][0])
-    TI['Return_Month'] = TI['Return_Date'].dt.strftime('%Y/%m').astype(str)
+def make_standard_report(tracked_items: pd.DataFrame) -> pd.DataFrame:
+    def make_features(item):
+        wpts = item['Waypoints']
+        list_companies = [i[0] for i in groupby(np.array(wpts)[:,1])]
+        return {
+            'Route': ' > '.join(list(map('.'.join, np.array(wpts)[:, 1:3]))),
+            'DCs': list_companies,
+            'Return_Date': wpts[1][0],
+            'Return_Month': wpts[1][0].strftime('%Y/%m'),
+            'Company(first)': wpts[0][1],
+            'SLOC(first)': wpts[0][2],
+            'SoldTo(first)': wpts[0][3],
+            'Company(last)': wpts[-1][1],
+            'SLOC(last)': wpts[-1][2],
+            'SoldTo(last)': wpts[-1][3],
+            'Num_Steps': len(wpts),
+            'Num_Companies': len(list_companies)
+        }
+    new_cols = tracked_items[['Waypoints']].apply(make_features,
+                                                  axis=1, result_type='expand')
+    ti = pd.concat([tracked_items, new_cols], axis='columns')
 
-    TI['First_Company'] = TI['Waypoints'].apply(lambda wpts: wpts[0][1])
-    TI['Last_Company'] = TI['Waypoints'].apply(lambda wpts: wpts[-1][1])
-    TI['First_SLOC'] = TI['Waypoints'].apply(lambda wpts: wpts[0][2])
-    TI['Last_SLOC'] = TI['Waypoints'].apply(lambda wpts: wpts[-1][2])
-    TI['First_SoldTo'] = TI['Waypoints'].apply(lambda wpts: wpts[0][3])
-    TI['Last_Mvt'] = TI['Waypoints'].apply(lambda wpts: wpts[-1][4])
-
-    TI['Num_Steps'] = TI['Waypoints'].apply(len) -1
-    TI['Num_DCs'] = TI['DCs'].apply(lambda DCs: len(DCs))
-    
-    Max_date = max(TI['Waypoints'].apply(lambda wpts: np.array(wpts)[-1,0]))
-    TI['Num_Days_Open'] = np.where(
-        TI['Open'].fillna(False),
-        Max_date - TI['Return_Date'],
-        TI['Waypoints'].apply(lambda wpts: wpts[-1][0]) - TI['Return_Date']
+    item_max_date = max(ti['Waypoints'].apply(lambda wpts: np.array(wpts)[-1,0]))
+    ti['Num_Days_Open'] = np.where(
+        ti['Open'].fillna(False),
+        item_max_date - ti['Return_Date'],
+        ti['Waypoints'].apply(lambda wpts: wpts[-1][0]) - ti['Return_Date']
     )
 
-    
-    # Data formating
-    TI['Return_Date'] = TI['Return_Date'].dt.strftime('%Y-%m-%d')
-    TI['DCs'] = TI['DCs'].apply(lambda DCs: ' > '.join(DCs))
-
+    # Formating
+    ti['Return_Date'] = ti['Return_Date'].dt.strftime('%Y-%m-%d')
+    ti['DCs'] = ti['DCs'].apply(lambda DCs: ' > '.join(DCs))
     def decorate_wpts(wpts):
-        return '  >>>  '.join(list(map(
-            lambda x: ', '.join(map(str, [x[0].strftime('%Y-%m-%d'), *x[1:]])),
-            wpts)))
-    TI['Waypoints'] = TI['Waypoints'].apply(lambda wpts: decorate_wpts(wpts))
-
-    return TI
+        return '  >>>  '.join(
+            [', '.join(map(str, ['-', *wpts[0][1:]]))]
+            + list(map(
+                lambda x: ', '.join(map(str, [x[0].strftime('%Y-%m-%d'), *x[1:]])),
+                wpts[1:]
+                ))
+            )
+    ti['Waypoints'] = ti['Waypoints'].apply(lambda wpts: decorate_wpts(wpts))
+    return ti
 
 
 def make_exportable_hist(tracked_Items: pd.DataFrame) -> pd.DataFrame:
