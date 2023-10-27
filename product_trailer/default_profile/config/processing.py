@@ -6,6 +6,7 @@ Functions:
     is_entry_point
 """
 
+from pathlib import Path
 from xlsx2csv import Xlsx2csv
 from io import StringIO
 import pandas as pd
@@ -52,13 +53,19 @@ def import_movements(filepath: str) -> pd.DataFrame:
                    'Special Stock Ind Code', 'Mvt Code', 'SLOC', 'Sold to',
                    'Brand', 'Category', 'SKU', 'Batch', 'QTY', 'Unit_Value']
 
-    
-    buffer = StringIO()
-    Xlsx2csv(filepath).convert(buffer)
-    buffer.seek(0)
+    fp = Path(filepath)
+    match fp.suffix.lower():
+        case 'xlsx' | 'xls':
+            fdata = StringIO()
+            Xlsx2csv(filepath).convert(fdata)
+            fdata.seek(0)
+        case 'csv':
+            fdata = fp
+        case _:
+            raise Exception('File type not supported')
 
     raw_mvt = (
-        pd.read_csv(buffer, low_memory=False,
+        pd.read_csv(fdata, low_memory=False,
                     dtype=inputcols_dtypes, parse_dates=['Posting Date'])
         .rename(columns=renaming_dict)
         .pipe(lambda df: df.loc[df['Material Type Code'] == 'FERT'])
