@@ -7,7 +7,7 @@ import argparse
 
 
 def main() -> None:
-    from product_trailer import core
+    from product_trailer.forwardtracker import ForwardTracker
     from product_trailer.config import validate_configname, Config
 
     # Arg parser
@@ -37,9 +37,14 @@ def main() -> None:
         print(f'Detected {len(unprocessed_raw_files)} file(s) not processed.')
         for fpath in unprocessed_raw_files:
             config.incr_run_count()
-            print(f"\n##### Process new movements: {fpath}", end='')
+            print(f'File: {fpath}', end='')
             new_raw_mvt = config.import_movements(fpath)
-            core.process_new(new_raw_mvt, config)
+            tracker = ForwardTracker(config)
+            tracker.prepare(new_raw_mvt)
+            all_items, mvts_done = tracker.run()
+            print('Saved %s items' % all_items.shape[0])
+            config.save_items(all_items)
+            config.save_movements(mvts_done)
             config.record_inputfile_processed(fpath)
         
         # Post-processing

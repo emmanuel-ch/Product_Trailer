@@ -1,0 +1,338 @@
+""" forwardtracker.py
+Forward tracking mechanism
+
+Class ForwardTracker - methods:
+    .__init__
+    ._prep_mvt
+    ._prep_item
+    ._make_hop
+    ._compute_incr
+    ._build_item
+    ._find_decr
+    ._find_incr
+"""
+
+
+import numpy as np
+import pandas as pd
+
+from product_trailer import basetracker
+
+
+class ForwardTracker(basetracker.BaseTracker):
+
+    def __init__(self, config):
+        super().__init__(config)
+
+
+    def _prep_mvt(self, new_raw_mvt: pd.DataFrame) -> pd.DataFrame:
+        return (
+            new_raw_mvt.loc[new_raw_mvt["SKU"].isin(self.tasklist)]
+            .copy()
+            .drop(
+                columns=[
+                    *self.config.input_features["company_features"],
+                    *self.config.input_features["sku_features"],
+                    "Special Stock Ind Code",
+                    "Unit_Value",
+                ]
+            )
+            .assign(
+                QTY_Unallocated=lambda df: df["QTY"].apply(abs),
+                Items_Allocated=lambda df: df.apply(
+                    lambda _: set(), result_type="reduce", axis=1
+                ),
+                Company_SLOC_Batch=lambda df: df[["Company", "SLOC", "Batch"]].apply(
+                    lambda row: "-".join(row), axis=1
+                ),
+            )
+        )
+    
+    def _prep_item(self, new_raw_data: pd.DataFrame) -> pd.DataFrame:
+        new_tracked_items = self._extract_items(new_raw_data)
+        saved_items = self.config.fetch_saved_items()
+        if isinstance(saved_items, pd.DataFrame):
+            tracked_items = pd.concat([saved_items, new_tracked_items])
+            return tracked_items, saved_items.shape[0]
+        return new_tracked_items, 0
+    
+    @staticmethod
+    def _make_hop(item: pd.Series, mvts: pd.DataFrame) -> list:
+        first_step = len(item['Waypoints']) == 1
+
+        if not np.isnan(item['Open']):
+            minus_mvts = ForwardTracker._find_decr(
+                first_step, item['Waypoints'][-1],
+                mvts,
+                item.name
+                )
+        else:
+            minus_mvts = pd.DataFrame(
+                {
+                    'Posting Date': [item['Waypoints'][-1][0]],
+                    'Batch': [item['Waypoints'][-1][5]],
+                    'PO': [item['Waypoints'][-1][4]],
+                    'Mvt Code': ['PO'],
+                    'Company': [item['Waypoints'][-1][1]], 
+                    'SLOC': [item['Waypoints'][-1][2]], 
+                    'Sold to': [item['Waypoints'][-1][3]],
+                    'QTY': [-item['QTY']],
+                    'QTY_Unallocated': [item['QTY']],
+                    'Items_Allocated': [set()]
+                }
+            )
+
+        if len(minus_mvts) == 0:  # Nothing found: The product didn't move
+            if first_step:
+                # DOUBLE-COUNTING PREVENTION
+                # If we are here, it means the tracked product passes by an 
+                # "entry point". To avoid double-counting, decision was made to 
+                # keep tracking the already tracked product, and do not register 
+                # the new entry.
+                return []
+            return [item]
+        
+        new_items = []
+        multiple_minuses = -minus_mvts.iloc[0]['QTY'] < item['QTY']
+        sub_ID_lv1 = 0
+        QTY_covered = 0
+
+        for minus_idx, minus_mvt in minus_mvts.iterrows():
+            # Positive int:
+            hop_minus_QTY = min(item['QTY'] - QTY_covered, -minus_mvt['QTY'])
+            plus_resolved = ForwardTracker._compute_incr(
+                minus_mvt, hop_minus_QTY, mvts, item.name
+            )
+
+            for sub_ID_2, this_plus_resolved in enumerate(plus_resolved):
+                if multiple_minuses:
+                    sub_ID = str(sub_ID_lv1) + (
+                        '.' + str(sub_ID_2) if (len(plus_resolved) > 1) else ''
+                    )
+                else:
+                    sub_ID = str(sub_ID_2) if (len(plus_resolved) > 1) else False
+
+                new_item = ForwardTracker._build_item(
+                    item, instruction = 'standard',
+                    data = {
+                        'minus_mvt': minus_mvt,
+                        'qty': this_plus_resolved['qty'],
+                        'plus_mvt': this_plus_resolved['plus_mvt']
+                    },
+                    sub_ID=sub_ID)
+                new_items.append(new_item)
+
+            if minus_mvt['Mvt Code'] != 'PO':
+                mvts.loc[minus_idx, 'QTY_Unallocated'] -= hop_minus_QTY
+                mvts.loc[minus_idx, 'Items_Allocated'].add(item.name)
+            
+            
+            QTY_covered += hop_minus_QTY
+            if QTY_covered == item['QTY']:
+                break
+            elif QTY_covered > item['QTY']:
+                raise Exception((f'Over-cover! Covered {QTY_covered} [-]',
+                                f' for item qty {item["QTY"]}'))
+
+            sub_ID_lv1 += 1
+        
+        if QTY_covered < item['QTY']:
+            new_items.append(
+                ForwardTracker._build_item(
+                    item,
+                    instruction='LastMinusNeeds_subID',
+                    data = {'qty': item['QTY'] - QTY_covered},
+                    sub_ID=str(sub_ID_lv1)
+                )
+            )
+        
+        return new_items
+    
+
+    @staticmethod
+    def _compute_incr(
+        minus_mvt: pd.Series, desired_QTY: int, mvts: pd.DataFrame, ID: str
+    ) -> list:
+        """Tried to find the [+] mvts: where the product has moved to.
+        minus_mvt: Info about the [-] mvt
+        desired_QTY: the quantity we track
+        task_MVTs: A df containing movements"""
+        plus_mvts = ForwardTracker._find_incr(minus_mvt, mvts)
+
+        if len(plus_mvts) == 0:  # No 1st-pass result for a +1: we widen the search
+            # Except if we were looking for 2nd half of PO
+            if minus_mvt['PO'] != '-2':
+                return [{'qty': desired_QTY, 'plus_mvt': 'PO2ndPartMissing'}]
+            # Last chance to find a [+]: we remove the filter on batch#
+            plus_mvts = ForwardTracker._find_incr(minus_mvt, mvts, True) 
+            if len(plus_mvts) == 0:  # Part is burnt or is on a PO
+                return [{'qty': desired_QTY, 'plus_mvt': 'BURNT'}]
+        
+        QTY_covered = 0
+        plus_resolved = []
+        for plus_idx, plus_mvt in plus_mvts.iterrows():
+            addnl_cover_QTY = min(plus_mvt.QTY, desired_QTY-QTY_covered)
+            plus_resolved.append({'qty': addnl_cover_QTY, 'plus_mvt': plus_mvt})
+            mvts.loc[plus_idx, 'QTY_Unallocated'] -= addnl_cover_QTY
+            mvts.loc[plus_idx, 'Items_Allocated'].add(ID)
+            QTY_covered += addnl_cover_QTY
+            if QTY_covered >= desired_QTY:
+                break
+        
+        if QTY_covered < desired_QTY:
+            # Ex: found 4 [+] for 5 [-]: assume the last unit was burnt
+            plus_resolved.append(
+                {'qty': desired_QTY-QTY_covered, 'plus_mvt': 'BURNT'}
+            )
+        
+        return plus_resolved
+
+
+    @staticmethod
+    def _build_item(
+        item: pd.Series, instruction: str, data: dict, sub_ID: bool | str
+    ) -> pd.Series:
+        new_item = item.copy(deep=True)
+        new_item['Waypoints'] = item['Waypoints'].copy()  # Lists are mutable
+        # Note the waypoints themselves still link to the same memory space.
+        # copy.deepcopy() would solve this, if this was an issue.
+
+        if instruction == 'LastMinusNeeds_subID':
+            new_item['QTY'] = data['qty']
+            new_item.name = new_item.name + '.' + sub_ID
+            return new_item
+        
+        if isinstance(data['plus_mvt'], str):  # instruction == 'standard'
+            if data['plus_mvt'] == 'BURNT':
+                new_item['Open'] = False
+                new_wpt = list(data['minus_mvt'][ForwardTracker.WAYPOINT_DEF])
+                new_wpt[2] = f"BURNT {data['minus_mvt']['SLOC']}"
+            elif data['plus_mvt'] == 'PO2ndPartMissing':
+                if data['minus_mvt']['SLOC'].startswith('PO FROM'):
+                    # Don't add a waypoint if we haven't found 2nd part of 
+                    # the PO for 2+ times in a row
+                    return new_item
+                new_item['Open'] = np.nan
+                new_wpt = list(data['minus_mvt'][ForwardTracker.WAYPOINT_DEF])
+                new_wpt[2] = 'PO FROM %s, mvt %s' % (
+                    data['minus_mvt']['SLOC'],
+                    data['minus_mvt']['Mvt Code']
+                )
+                new_wpt[4] = data['minus_mvt']['PO']
+            else:
+                raise Exception('Unexpected [+] mvt resolution type')
+        else:
+            if len(new_item.Waypoints) == 1:
+                new_item['Waypoints'][0][0] = pd.NaT
+                new_item['Waypoints'][0][4] = ''
+            
+            new_item['Open'] = True
+            new_wpt = list(data['plus_mvt'].loc[ForwardTracker.WAYPOINT_DEF])
+            if new_wpt[2] != 'NA': # Remove SoldTo if SLOC isn't a Consignment
+                new_wpt[3] = np.nan
+            if data['minus_mvt']['Mvt Code'] != new_wpt[4]: # Combination of codes
+                new_wpt[4] = data['minus_mvt']['Mvt Code'] + '/' + new_wpt[4]
+
+        new_item['Waypoints'].append(new_wpt)
+        new_item['QTY'] = data['qty']
+        if sub_ID:
+            new_item.name = new_item.name + '.' + sub_ID
+        return new_item
+
+    @staticmethod
+    def _find_decr(
+        first_step: bool, wpt: list, mvts: pd.DataFrame, ID: str
+    ) -> pd.DataFrame:
+        if not first_step:
+            if wpt[2] == 'NA':  # Add filter on SoldTo if SKU in consignment
+                decrement = mvts.loc[
+                    (mvts['Posting Date'].values >= wpt[0])
+                    & (mvts['Company_SLOC_Batch'].values == (
+                        wpt[1] + '-' + wpt[2] + '-' + wpt[5]
+                    ))
+                    & (mvts['Sold to'].values == wpt[3])
+                    & (mvts['Items_Allocated'].apply(
+                        lambda Item_Allocated: ID not in Item_Allocated
+                        ))
+                    & (mvts['QTY'].values <= -1)
+                    & (mvts['QTY_Unallocated'].values >= 1)
+                ]
+            else:
+                decrement = mvts.loc[
+                    (mvts['Posting Date'].values >= wpt[0])
+                    & (mvts['Company_SLOC_Batch'].values == (
+                        wpt[1] + '-' + wpt[2] + '-' + wpt[5]
+                    ))
+                    & (mvts['Items_Allocated'].apply(
+                        lambda Item_Allocated: ID not in Item_Allocated
+                        ))
+                    & (mvts['QTY'].values <= -1)
+                    & (mvts['QTY_Unallocated'].values >= 1)
+                ]
+        else:  # We're looking for the 1st movement of the tracked product
+            decrement = mvts.loc[
+                (mvts['Posting Date'].values == wpt[0])
+                & (mvts['Company_SLOC_Batch'].values == (
+                    wpt[1] + '-' + wpt[2] + '-' + wpt[5]
+                    ))
+                & (mvts['Sold to'].values == wpt[3])
+                & (mvts['Mvt Code'].values == wpt[4])
+                & (mvts['QTY'].values <= -1)
+                & (mvts['QTY_Unallocated'].values >= 1)
+            ]
+        return decrement
+    
+
+    @staticmethod
+    def _find_incr(
+        decr: pd.Series, mvt: pd.DataFrame, nobatch: bool = False
+    ) -> pd.DataFrame:
+        # Exceptions on top, general case is down
+        if decr['Mvt Code'] == '956':  # Change of SoldTo
+            return mvt.loc[
+                (mvt['Posting Date'].values == decr['Posting Date'])
+                & (mvt['Company'].values == decr['Company'])
+                & (mvt['Mvt Code'].values == '955')
+                & (mvt['Batch'].values == decr['Batch'])
+                & (mvt['QTY'].values >= 1)
+                & (mvt['QTY_Unallocated'].values >= 1)
+            ]
+        elif decr['Mvt Code'] == '702':  # Change of batch number
+            return mvt.loc[
+                (mvt['Posting Date'].values == decr['Posting Date'])
+                & (mvt['Company'].values == decr['Company'])
+                & (mvt['SLOC'].values == decr['SLOC'])
+                & (mvt['Sold to'].values == decr['Sold to'])
+                & (mvt['Mvt Code'].values == '701')
+                & (mvt['QTY'].values >= 1)
+                & (mvt['QTY_Unallocated'].values >= 1)
+            ]
+        elif decr['PO'] != '-2':  # PO: PO number checked but not mvt code
+            return mvt.loc[
+                (mvt['Posting Date'].values >= decr['Posting Date'])
+                & (mvt['Batch'].values == decr['Batch'])
+                & (mvt['PO'].values == decr['PO'])
+                & (mvt['QTY'].values >= 1)
+                & (mvt['QTY_Unallocated'].values >= 1)
+            ]
+        elif nobatch:  # Loosen search if can't find [+] mvt
+            return mvt.loc[
+                (mvt['Posting Date'].values == decr['Posting Date'])
+                & (mvt['Company'].values == decr['Company'])
+                & (mvt['Sold to'].values == decr['Sold to'])
+                & (mvt['Mvt Code'].values == decr['Mvt Code'])
+                & (mvt['Document'].values == decr['Document'])
+                & (mvt['QTY'].values >= 1)
+                & (mvt['QTY_Unallocated'].values >= 1)
+            ]
+        else:  # Standard mvt
+            return mvt.loc[
+                (mvt['Posting Date'].values == decr['Posting Date'])
+                & (mvt['Company'].values == decr['Company'])
+                & (mvt['Sold to'].values == decr['Sold to'])
+                & (mvt['Batch'].values == decr['Batch'])
+                & (mvt['Mvt Code'].values == decr['Mvt Code'])
+                & (mvt['Document'].values == decr['Document'])
+                & (mvt['QTY'].values >= 1)
+                & (mvt['QTY_Unallocated'].values >= 1)
+            ]
