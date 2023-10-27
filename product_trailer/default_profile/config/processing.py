@@ -6,7 +6,8 @@ Functions:
     is_entry_point
 """
 
-
+from xlsx2csv import Xlsx2csv
+from io import StringIO
 import pandas as pd
 
 
@@ -20,7 +21,6 @@ def import_movements(filepath: str) -> pd.DataFrame:
     """
     
     inputcols_dtypes = {
-        'Posting Date': 'datetime64[ns]',
         'Company': 'category',
         'Country ISO Code': 'category',
         'Material Document Number': str,
@@ -52,8 +52,14 @@ def import_movements(filepath: str) -> pd.DataFrame:
                    'Special Stock Ind Code', 'Mvt Code', 'SLOC', 'Sold to',
                    'Brand', 'Category', 'SKU', 'Batch', 'QTY', 'Unit_Value']
 
+    
+    buffer = StringIO()
+    Xlsx2csv(filepath).convert(buffer)
+    buffer.seek(0)
+
     raw_mvt = (
-        pd.read_excel(filepath, dtype=inputcols_dtypes)
+        pd.read_csv(buffer, low_memory=False,
+                    dtype=inputcols_dtypes, parse_dates=['Posting Date'])
         .rename(columns=renaming_dict)
         .pipe(lambda df: df.loc[df['Material Type Code'] == 'FERT'])
         .sort_values(by=['Posting Date', 'QTY'], ascending=[True, False])
