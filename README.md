@@ -82,6 +82,7 @@ Non-standard packages used:
 - line_profiler
 - networkx
 - matplotlib
+- xlsx2csv
 
 
 ## Contributing
