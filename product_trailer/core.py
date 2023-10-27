@@ -69,8 +69,8 @@ def process_new(new_raw_mvt: str, config) -> bool:
     for task in (pbar := tqdm.tqdm(tasks_queue, desc='Crunching... ')):
         pbar.set_postfix({'SKU': task}, refresh=False)
 
-        task_Items_open = Items_open.loc[(Items_open['SKU'] == task)].copy()
-        task_Movements = MVT_DB.loc[(MVT_DB['SKU'] == task)].copy()
+        task_Items_open = Items_open.loc[(Items_open['SKU'] == task)]
+        task_Movements = MVT_DB.loc[(MVT_DB['SKU'] == task)]
         out_items, out_MVTs = process_item_group(task_Items_open,
                                                   task_Movements)
         list_computed_items.append(out_items)
@@ -114,11 +114,11 @@ def extract_items(raw_mvt: pd.DataFrame, config) -> pd.DataFrame:
         return f"_{item['Company']}/{item['SLOC']}/{item['Sold to'][4:11]}_" \
                 + f"{item['Mvt Code']}/{item['Posting Date']:%Y-%m-%d}_" \
                 + f"{item['SKU']}:{item['Batch']}"
-
+    
     trailed_products = (
         raw_mvt
         .copy()
-        .pipe(lambda df: df.loc[df.apply(config.is_entry_point, axis=1)])
+        .pipe(lambda df: df.loc[config.is_entry_point(df)])
         .pivot_table(observed=True, values=['Unit_Value', 'QTY'],
                      aggfunc={'Unit_Value': 'mean', 'QTY': 'sum'},
                      index=ID_definition)
@@ -136,7 +136,7 @@ def extract_items(raw_mvt: pd.DataFrame, config) -> pd.DataFrame:
         .assign(Open = True,
                 QTY = lambda df: -df['QTY'],
                 Waypoints = lambda df: df.apply(
-                    lambda row: [row[_WAYPOINTS_DEF_].values.tolist()],
+                    lambda row: [list(row.loc[_WAYPOINTS_DEF_].values)],
                     axis=1
                     )
         )
@@ -181,22 +181,22 @@ def compute_route(item: pd.Series, task_MVTs: pd.DataFrame) -> list:
 
 
 def compute_hop(item: pd.Series, task_MVTs: pd.DataFrame) -> list:
-    first_step = len(item.Waypoints) == 1
+    first_step = len(item['Waypoints']) == 1
 
-    if not np.isnan(item.Open):
-        minus_mvts = find_minus_lines(first_step, item.Waypoints[-1],
+    if not np.isnan(item['Open']):
+        minus_mvts = find_minus_lines(first_step, item['Waypoints'][-1],
                                       task_MVTs, item.name)
     else:
         minus_mvts = pd.DataFrame({
-            'Posting Date': [item.Waypoints[-1][0]],
-            'Batch': [item.Waypoints[-1][5]],
-            'PO': [item.Waypoints[-1][4]],
+            'Posting Date': [item['Waypoints'][-1][0]],
+            'Batch': [item['Waypoints'][-1][5]],
+            'PO': [item['Waypoints'][-1][4]],
             'Mvt Code': ['PO'],
-            'Company': [item.Waypoints[-1][1]], 
-            'SLOC': [item.Waypoints[-1][2]], 
-            'Sold to': [item.Waypoints[-1][3]],
-            'QTY': [-item.QTY],
-            'QTY_Unallocated': [item.QTY],
+            'Company': [item['Waypoints'][-1][1]], 
+            'SLOC': [item['Waypoints'][-1][2]], 
+            'Sold to': [item['Waypoints'][-1][3]],
+            'QTY': [-item['QTY']],
+            'QTY_Unallocated': [item['QTY']],
             'Items_Allocated': [set()]
         })
 
@@ -211,12 +211,12 @@ def compute_hop(item: pd.Series, task_MVTs: pd.DataFrame) -> list:
         return [item]
     
     new_items = []
-    multiple_minuses = -minus_mvts.iloc[0].QTY < item.QTY
+    multiple_minuses = -minus_mvts.iloc[0]['QTY'] < item['QTY']
     sub_ID_lv1 = 0
     QTY_covered = 0
 
     for minus_idx, minus_mvt in minus_mvts.iterrows():
-        hop_minus_QTY = min(item.QTY - QTY_covered, -minus_mvt.QTY)  # positive
+        hop_minus_QTY = min(item['QTY'] - QTY_covered, -minus_mvt['QTY'])  # positive
         plus_resolved = compute_plus_mvts(minus_mvt, hop_minus_QTY,
                                           task_MVTs, item.name)
 
@@ -245,17 +245,17 @@ def compute_hop(item: pd.Series, task_MVTs: pd.DataFrame) -> list:
         
         
         QTY_covered += hop_minus_QTY
-        if QTY_covered == item.QTY:
+        if QTY_covered == item['QTY']:
             break
-        elif QTY_covered > item.QTY:
+        elif QTY_covered > item['QTY']:
             raise Exception((f'Over-cover! Covered {QTY_covered} [-]',
-                             f' for item qty {item.QTY}'))
+                             f' for item qty {item["QTY"]}'))
 
         sub_ID_lv1 += 1
     
-    if QTY_covered < item.QTY:
+    if QTY_covered < item['QTY']:
         new_item = construct_new_item(item, instruction='LastMinusNeeds_subID',
-                                      data = {'qty': item.QTY - QTY_covered},
+                                      data = {'qty': item['QTY'] - QTY_covered},
                                       sub_ID=str(sub_ID_lv1))
         new_items.append(new_item)
     
@@ -276,7 +276,6 @@ def compute_plus_mvts(minus_mvt: pd.Series,
         # Except if we were looking for 2nd half of PO
         if minus_mvt['PO'] != '-2':
             return [{'qty': desired_QTY, 'plus_mvt': 'PO2ndPartMissing'}]
-        
         # Last chance to find a [+]: we remove the filter on batch#
         plus_mvts = find_plus_lines_nobatch(minus_mvt, task_MVTs) 
         if len(plus_mvts) == 0:  # Part is burnt or is on a PO
@@ -287,11 +286,8 @@ def compute_plus_mvts(minus_mvt: pd.Series,
     for plus_idx, plus_mvt in plus_mvts.iterrows():
         addnl_cover_QTY = min(plus_mvt.QTY, desired_QTY-QTY_covered)
         plus_resolved.append({'qty': addnl_cover_QTY, 'plus_mvt': plus_mvt})
-
         task_MVTs.loc[plus_idx, 'QTY_Unallocated'] -= addnl_cover_QTY
         task_MVTs.loc[plus_idx, 'Items_Allocated'].add(ID)
-        
-
         QTY_covered += addnl_cover_QTY
         if QTY_covered >= desired_QTY:
             break
@@ -311,18 +307,18 @@ def construct_new_item(item: pd.Series,
                        data: dict,
                        sub_ID: bool | str) -> pd.Series:
     new_item = item.copy(deep=True)
-    new_item.Waypoints = item.Waypoints.copy()  # Mutability of lists!
+    new_item['Waypoints'] = item['Waypoints'].copy()  # Mutability of lists!
     # Note the waypoints themselves still link to the same memory space.
     # copy.deepcopy() would solve this, if this was an issue.
 
     if instruction == 'LastMinusNeeds_subID':
-        new_item.QTY = data['qty']
+        new_item['QTY'] = data['qty']
         new_item.name = new_item.name + '.' + sub_ID
         return new_item
     
     if isinstance(data['plus_mvt'], str):  # when instruction == 'standard':
         if data['plus_mvt'] == 'BURNT':
-            new_item.Open = False
+            new_item['Open'] = False
             new_wpt = data['minus_mvt'][_WAYPOINTS_DEF_].tolist()
             new_wpt[2] = f"BURNT {data['minus_mvt']['SLOC']}"
         elif data['plus_mvt'] == 'PO2ndPartMissing':
@@ -330,7 +326,7 @@ def construct_new_item(item: pd.Series,
                 # Don't add a waypoint if we haven't found 2nd part of the PO 
                 # for 2+ times in a row
                 return new_item
-            new_item.Open = np.nan
+            new_item['Open'] = np.nan
             new_wpt = data['minus_mvt'][_WAYPOINTS_DEF_].tolist()
             new_wpt[2] = (
                 f"PO FROM {data['minus_mvt']['SLOC']},"
@@ -340,22 +336,22 @@ def construct_new_item(item: pd.Series,
         else:
             raise Exception('Unexpected [+] mvt resolution type.')
     else:
-        new_item.Open = True
+        new_item['Open'] = True
 
         if len(new_item.Waypoints) == 1:
-            new_item.Waypoints[0][0] = pd.NaT
-            new_item.Waypoints[0][4] = ''
+            new_item['Waypoints'][0][0] = pd.NaT
+            new_item['Waypoints'][0][4] = ''
 
-        new_wpt = data['plus_mvt'][_WAYPOINTS_DEF_].tolist()
+        new_wpt = data['plus_mvt'].loc[_WAYPOINTS_DEF_].to_list()
         if new_wpt[2] != 'NA': # Remove SoldTo if the SLOC isn't a Consignment
             new_wpt[3] = np.nan
         
         if data['minus_mvt']['Mvt Code'] != new_wpt[4]: # Combination of codes
             new_wpt[4] = data['minus_mvt']['Mvt Code'] + '/' + new_wpt[4]
 
-    new_item.Waypoints.append(new_wpt)
+    new_item['Waypoints'].append(new_wpt)
 
-    new_item.QTY = data['qty']
+    new_item['QTY'] = data['qty']
     if sub_ID:
         new_item.name = new_item.name + '.' + sub_ID
 
@@ -392,7 +388,7 @@ def find_minus_lines(this_is_first_step: bool,
                 & (MVT_DB['QTY'].values <= -1)
                 & (MVT_DB['QTY_Unallocated'].values >= 1)
             ]
-    else: # We're looking for the 1st movement of the tracked product
+    else:  # We're looking for the 1st movement of the tracked product
         minus1_line = MVT_DB.loc[
             (MVT_DB['Posting Date'].values == latest_wpt[0])
             & (MVT_DB['Company_SLOC_Batch'].values == (

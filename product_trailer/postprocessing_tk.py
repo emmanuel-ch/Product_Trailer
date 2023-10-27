@@ -60,7 +60,7 @@ def make_standard_report(tracked_items: pd.DataFrame) -> pd.DataFrame:
                 ))
             )
     ti['Waypoints'] = ti['Waypoints'].apply(lambda wpts: decorate_wpts(wpts))
-    return ti
+    return ti.reset_index()
 
 
 def make_exportable_hist(tracked_Items: pd.DataFrame) -> pd.DataFrame:
