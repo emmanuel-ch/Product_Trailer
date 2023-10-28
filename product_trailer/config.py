@@ -90,17 +90,18 @@ class Config():
     def find_unprocessed_files(self, foldername: str, prefix: str) -> set:
         processedf = self.user_data.fetch()
         if 'processedf' in processedf.keys():
-            self.raw_processed = set(processedf['processedf'])
+            raw_processed = set(processedf['processedf'])
         else:
-            self.raw_processed = set()
+            raw_processed = set()
         
         all_raw_files = set(map(str, Path(foldername).glob(prefix + '*')))
-        return sorted(all_raw_files.difference(self.raw_processed))
+        return sorted(all_raw_files.difference(raw_processed))
     
 
     def record_inputfile_processed(self, filename: str) -> None:
-        self.raw_processed.add(str(filename))
-        self.user_data.set({'processedf': list(self.raw_processed)})
+        raw_processed = self.user_data.fetch('processedf', set())
+        raw_processed.add(str(filename))
+        self.user_data.set({'processedf': list(raw_processed)})
     
 
     def fetch_saved_items(self) -> None | pd.DataFrame:

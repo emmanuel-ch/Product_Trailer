@@ -52,3 +52,43 @@ def test_use_custom_config():
     test = testcfg.config_path == Path(f'./profiles/{config_name}/config')
     shutil.rmtree(profile_path)
     assert test
+
+def test_incr_run_count():
+    config_name = 'test_config'
+    profile_path = Path('profiles') / config_name
+    testcfg = Config(config_name)
+    testcfg.incr_run_count()
+    test = testcfg.user_data.fetch('run_count') == 1
+    shutil.rmtree(profile_path)
+    assert test
+
+def test_find_unprocessed(tmp_path):
+    config_name = 'test_config'
+    profile_path = Path('profiles') / config_name
+    testcfg = Config(config_name)
+    fprefix = 'Some '
+    newfilep = tmp_path / (fprefix + 'file 42.txt')
+    with open(newfilep, 'w') as newfile:
+        newfile.write('bar')
+    test = testcfg.find_unprocessed_files(tmp_path, fprefix) == [str(newfilep)]
+    shutil.rmtree(profile_path)
+    newfilep.unlink()
+    assert test
+
+def test_find_unprocessed_with_preexisting_file(tmp_path):
+    config_name = 'test_config'
+    profile_path = Path('profiles') / config_name
+    testcfg = Config(config_name)
+    fprefix = 'Some '
+    newfilep1 = tmp_path / (fprefix + 'file 41.txt')
+    testcfg.record_inputfile_processed(str(newfilep1))
+    newfilep2 = tmp_path / (fprefix + 'file 42.txt')
+    with open(newfilep1, 'w') as newfile:
+        newfile.write('bar')
+    with open(newfilep2, 'w') as newfile:
+        newfile.write('bar')
+    test = testcfg.find_unprocessed_files(tmp_path, fprefix) == [str(newfilep2)]
+    shutil.rmtree(profile_path)
+    newfilep1.unlink()
+    newfilep2.unlink()
+    assert test
