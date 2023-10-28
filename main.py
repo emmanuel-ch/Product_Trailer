@@ -8,7 +8,7 @@ import argparse
 
 def main() -> None:
     from product_trailer.scheduler import Scheduler
-    from product_trailer.config import validate_configname, Config
+    from product_trailer.config import Config
 
     # Arg parser
     parser = argparse.ArgumentParser(
@@ -25,7 +25,7 @@ def main() -> None:
 
 
     print('\n\n', ' PRODUCT-TRAILER '.center(80, '#'), sep='')
-    if not validate_configname(args.profile_name):
+    if not Config.validate_configname(args.profile_name):
         print('Profile name not valid.',
               'Characters allowed (max 30): a-z, A-Z, 0-9, -_.,()')
     else:

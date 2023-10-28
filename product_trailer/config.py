@@ -25,18 +25,6 @@ import matplotlib.pyplot as plt
 from product_trailer.user_data import UserData
 
 
-def validate_configname(config_name: str) -> bool:
-    valid_chars = "-_.,()" + string.ascii_letters + string.digits
-    acceptable_name = ''.join(
-        char for char in config_name if char in valid_chars
-        )
-    return (
-        (config_name == acceptable_name)
-        and (len(config_name) > 0)
-        and (len(config_name) < 30)
-    )
-
-
 
 class Config():
 
@@ -75,6 +63,17 @@ class Config():
         self.import_movements = processing.import_movements
         self.is_entry_point = processing.is_entry_point
     
+    @staticmethod
+    def validate_configname(config_name: str) -> bool:
+        valid_chars = "-_.,()" + string.ascii_letters + string.digits
+        acceptable_name = ''.join(
+            char for char in config_name if char in valid_chars
+            )
+        return (
+            (config_name == acceptable_name)
+            and (len(config_name) > 0)
+            and (len(config_name) < 30)
+        )
 
     def incr_run_count(self):
         self.run_count = self.user_data.fetch('run_count', 0) + 1
@@ -169,4 +168,3 @@ class Config():
     def save_figure(self, figure: plt.figure, fname: str) -> None:
         fpath = self.reports_path / fname
         figure.savefig(fpath, format='png')
-
