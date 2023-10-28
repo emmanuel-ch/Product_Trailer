@@ -55,11 +55,11 @@ def import_movements(filepath: str) -> pd.DataFrame:
 
     fp = Path(filepath)
     match fp.suffix.lower():
-        case 'xlsx' | 'xls':
+        case '.xlsx' | '.xls':
             fdata = StringIO()
             Xlsx2csv(filepath).convert(fdata)
             fdata.seek(0)
-        case 'csv':
+        case '.csv':
             fdata = fp
         case _:
             raise Exception('File type not supported')

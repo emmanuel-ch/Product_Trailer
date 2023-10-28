@@ -1,28 +1,28 @@
-""" basetracker.py
-Base class for all tracking mechanisms
+""" scheduler.py
+Administration of computational tasks.
 
-Class BaseTracker - methods:
+Class Scheduler - methods:
     .__init__
     .prepare
     .run
+    ._prep_mvt
+    ._prep_item
     ._extract_items
-    ._do_task
-    ._make_route
 """
 
 
-import numpy as np
 import pandas as pd
 import tqdm
 
+from product_trailer.forwardtracker import ForwardTracker
 
-class BaseTracker:
-    WAYPOINT_DEF = ['Posting Date', 'Company', 'SLOC', 'Sold to', 'Mvt Code', 'Batch']
+
+class Scheduler:
+    DEF_WPT = ['Posting Date', 'Company', 'SLOC', 'Sold to', 'Mvt Code', 'Batch']
     
     def __init__(self, config):
         self.config = config
     
-
     def prepare(self, new_raw_data):
         items, num_retrieved = self._prep_item(new_raw_data)
         self.items_todo = items.loc[items['Open'].fillna(True)].copy()
@@ -59,9 +59,12 @@ class BaseTracker:
     def run(self):
         for task in (pbar := tqdm.tqdm(self.tasklist, desc='Crunching... ')):
             pbar.set_postfix({'Object': task}, refresh=False)
-            add_items, add_mvts = self._do_task(
-                self.items_todo.loc[(self.items_todo['SKU'] == task)],
-                self.mvts.loc[(self.mvts['SKU'] == task)]
+            add_items, add_mvts = (
+                ForwardTracker(Scheduler.DEF_WPT)
+                .do_task(
+                    self.items_todo.loc[(self.items_todo['SKU'] == task)],
+                    self.mvts.loc[(self.mvts['SKU'] == task)]
+                )
             )
             self.items_done.append(add_items)
             if self.config.db_config['save_movements']:
@@ -74,6 +77,38 @@ class BaseTracker:
     #
     # NON-USER INTERFACE METHODS
     #
+
+    def _prep_item(self, new_raw_data: pd.DataFrame) -> pd.DataFrame:
+        new_tracked_items = self._extract_items(new_raw_data)
+        saved_items = self.config.fetch_saved_items()
+        if isinstance(saved_items, pd.DataFrame):
+            tracked_items = pd.concat([saved_items, new_tracked_items])
+            return tracked_items, saved_items.shape[0]
+        return new_tracked_items, 0
+    
+    def _prep_mvt(self, new_raw_mvt: pd.DataFrame) -> pd.DataFrame:
+        return (
+            new_raw_mvt.loc[new_raw_mvt["SKU"].isin(self.tasklist)]
+            .copy()
+            .drop(
+                columns=[
+                    *self.config.input_features["company_features"],
+                    *self.config.input_features["sku_features"],
+                    "Special Stock Ind Code",
+                    "Unit_Value",
+                ]
+            )
+            .assign(
+                QTY_Unallocated=lambda df: df["QTY"].apply(abs),
+                Items_Allocated=lambda df: df.apply(
+                    lambda _: set(), result_type="reduce", axis=1
+                ),
+                Company_SLOC_Batch=lambda df: df[["Company", "SLOC", "Batch"]].apply(
+                    lambda row: "-".join(row), axis=1
+                ),
+            )
+        )
+
     def _extract_items(self, raw_mvt: pd.DataFrame) -> pd.DataFrame:
         ID_definition = [
             'Company',
@@ -86,7 +121,6 @@ class BaseTracker:
         ]
         company_features = ['Company', *self.config.input_features['company_features']]
         sku_features = ['SKU', *self.config.input_features['sku_features']]
-
         def build_ID(item):
             return (
                 f"_{item['Company']}/{item['SLOC']}/{item['Sold to'][4:11]}_"
@@ -120,7 +154,7 @@ class BaseTracker:
                 Open = True,
                 QTY = lambda df: -df['QTY'],
                 Waypoints = lambda df: df.apply(
-                    lambda row: [list(row.loc[BaseTracker.WAYPOINT_DEF].values)],
+                    lambda row: [list(row.loc[Scheduler.DEF_WPT].values)],
                     axis=1
                     )
             )
@@ -139,28 +173,3 @@ class BaseTracker:
             ]
         )
         return trailed_products
-
-    def _do_task(
-            self, task_items: pd.DataFrame, task_MVTs: pd.DataFrame
-        ) -> (pd.DataFrame, pd.DataFrame):
-        if len(task_MVTs) == 0:  # No mvt => Skip this
-            return task_items, task_MVTs
-        items_computed = []  # list of pd.Series
-        for _, row in task_items.iterrows():
-            items_computed.extend(self._make_route(row, task_MVTs))
-        df_items_computed = pd.DataFrame(items_computed)
-        
-        return df_items_computed, task_MVTs
-
-    def _make_route(self, item: pd.Series, mvts: pd.DataFrame) -> list:
-        new_items = self._make_hop(item, mvts)
-        if len(new_items) == 0:
-            return []
-        elif len(new_items) == 1:
-            if item.equals(new_items[0]):  # Product didn't travel further
-                return [item]
-        return [
-            an_item
-            for new_item in new_items
-            for an_item in self._make_route(new_item, mvts)
-        ]

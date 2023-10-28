@@ -7,7 +7,7 @@ import argparse
 
 
 def main() -> None:
-    from product_trailer.forwardtracker import ForwardTracker
+    from product_trailer.scheduler import Scheduler
     from product_trailer.config import validate_configname, Config
 
     # Arg parser
@@ -39,9 +39,9 @@ def main() -> None:
             config.incr_run_count()
             print(f'File: {fpath}', end='')
             new_raw_mvt = config.import_movements(fpath)
-            tracker = ForwardTracker(config)
-            tracker.prepare(new_raw_mvt)
-            all_items, mvts_done = tracker.run()
+            scheduler = Scheduler(config)
+            scheduler.prepare(new_raw_mvt)
+            all_items, mvts_done = scheduler.run()
             print('Saved %s items' % all_items.shape[0])
             config.save_items(all_items)
             config.save_movements(mvts_done)

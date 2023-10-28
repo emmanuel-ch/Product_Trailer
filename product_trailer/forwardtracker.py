@@ -3,8 +3,8 @@ Forward tracking mechanism
 
 Class ForwardTracker - methods:
     .__init__
-    ._prep_mvt
-    ._prep_item
+    .do_task
+    ._make_route
     ._make_hop
     ._compute_incr
     ._build_item
@@ -16,52 +16,42 @@ Class ForwardTracker - methods:
 import numpy as np
 import pandas as pd
 
-from product_trailer import basetracker
 
+class ForwardTracker():
+    def __init__(self, defwpt: list[str]) -> None:
+        self.defwpt = defwpt
 
-class ForwardTracker(basetracker.BaseTracker):
+    def do_task(
+        self, task_items: pd.DataFrame, task_MVTs: pd.DataFrame,
+    ) -> (pd.DataFrame, pd.DataFrame):
+        if len(task_MVTs) == 0:  # No mvt => Skip this
+            return task_items, task_MVTs
+        items_computed = []  # list of pd.Series
+        for _, row in task_items.iterrows():
+            items_computed.extend(self._make_route(row, task_MVTs))
+        df_items_computed = pd.DataFrame(items_computed)
+        
+        return df_items_computed, task_MVTs
 
-    def __init__(self, config):
-        super().__init__(config)
-
-
-    def _prep_mvt(self, new_raw_mvt: pd.DataFrame) -> pd.DataFrame:
-        return (
-            new_raw_mvt.loc[new_raw_mvt["SKU"].isin(self.tasklist)]
-            .copy()
-            .drop(
-                columns=[
-                    *self.config.input_features["company_features"],
-                    *self.config.input_features["sku_features"],
-                    "Special Stock Ind Code",
-                    "Unit_Value",
-                ]
-            )
-            .assign(
-                QTY_Unallocated=lambda df: df["QTY"].apply(abs),
-                Items_Allocated=lambda df: df.apply(
-                    lambda _: set(), result_type="reduce", axis=1
-                ),
-                Company_SLOC_Batch=lambda df: df[["Company", "SLOC", "Batch"]].apply(
-                    lambda row: "-".join(row), axis=1
-                ),
-            )
-        )
+    def _make_route(self, item: pd.Series, mvts: pd.DataFrame) -> list:
+        new_items = self._make_hop(item, mvts)
+        if len(new_items) == 0:
+            return []
+        elif len(new_items) == 1:
+            if item.equals(new_items[0]):  # Product didn't travel further
+                return [item]
+        return [
+            an_item
+            for new_item in new_items
+            for an_item in self._make_route(new_item, mvts)
+        ]
     
-    def _prep_item(self, new_raw_data: pd.DataFrame) -> pd.DataFrame:
-        new_tracked_items = self._extract_items(new_raw_data)
-        saved_items = self.config.fetch_saved_items()
-        if isinstance(saved_items, pd.DataFrame):
-            tracked_items = pd.concat([saved_items, new_tracked_items])
-            return tracked_items, saved_items.shape[0]
-        return new_tracked_items, 0
     
-    @staticmethod
-    def _make_hop(item: pd.Series, mvts: pd.DataFrame) -> list:
+    def _make_hop(self, item: pd.Series, mvts: pd.DataFrame) -> list:
         first_step = len(item['Waypoints']) == 1
 
         if not np.isnan(item['Open']):
-            minus_mvts = ForwardTracker._find_decr(
+            minus_mvts = self._find_decr(
                 first_step, item['Waypoints'][-1],
                 mvts,
                 item.name
@@ -100,7 +90,7 @@ class ForwardTracker(basetracker.BaseTracker):
         for minus_idx, minus_mvt in minus_mvts.iterrows():
             # Positive int:
             hop_minus_QTY = min(item['QTY'] - QTY_covered, -minus_mvt['QTY'])
-            plus_resolved = ForwardTracker._compute_incr(
+            plus_resolved = self._compute_incr(
                 minus_mvt, hop_minus_QTY, mvts, item.name
             )
 
@@ -112,7 +102,7 @@ class ForwardTracker(basetracker.BaseTracker):
                 else:
                     sub_ID = str(sub_ID_2) if (len(plus_resolved) > 1) else False
 
-                new_item = ForwardTracker._build_item(
+                new_item = self._build_item(
                     item, instruction = 'standard',
                     data = {
                         'minus_mvt': minus_mvt,
@@ -138,7 +128,7 @@ class ForwardTracker(basetracker.BaseTracker):
         
         if QTY_covered < item['QTY']:
             new_items.append(
-                ForwardTracker._build_item(
+                self._build_item(
                     item,
                     instruction='LastMinusNeeds_subID',
                     data = {'qty': item['QTY'] - QTY_covered},
@@ -149,22 +139,25 @@ class ForwardTracker(basetracker.BaseTracker):
         return new_items
     
 
-    @staticmethod
     def _compute_incr(
-        minus_mvt: pd.Series, desired_QTY: int, mvts: pd.DataFrame, ID: str
+        self,
+        minus_mvt: pd.Series,
+        desired_QTY: int,
+        mvts: pd.DataFrame,
+        ID: str
     ) -> list:
         """Tried to find the [+] mvts: where the product has moved to.
         minus_mvt: Info about the [-] mvt
         desired_QTY: the quantity we track
         task_MVTs: A df containing movements"""
-        plus_mvts = ForwardTracker._find_incr(minus_mvt, mvts)
+        plus_mvts = self._find_incr(minus_mvt, mvts)
 
         if len(plus_mvts) == 0:  # No 1st-pass result for a +1: we widen the search
             # Except if we were looking for 2nd half of PO
             if minus_mvt['PO'] != '-2':
                 return [{'qty': desired_QTY, 'plus_mvt': 'PO2ndPartMissing'}]
             # Last chance to find a [+]: we remove the filter on batch#
-            plus_mvts = ForwardTracker._find_incr(minus_mvt, mvts, True) 
+            plus_mvts = self._find_incr(minus_mvt, mvts, True) 
             if len(plus_mvts) == 0:  # Part is burnt or is on a PO
                 return [{'qty': desired_QTY, 'plus_mvt': 'BURNT'}]
         
@@ -188,9 +181,8 @@ class ForwardTracker(basetracker.BaseTracker):
         return plus_resolved
 
 
-    @staticmethod
     def _build_item(
-        item: pd.Series, instruction: str, data: dict, sub_ID: bool | str
+        self, item: pd.Series, instruction: str, data: dict, sub_ID: bool | str
     ) -> pd.Series:
         new_item = item.copy(deep=True)
         new_item['Waypoints'] = item['Waypoints'].copy()  # Lists are mutable
@@ -205,7 +197,7 @@ class ForwardTracker(basetracker.BaseTracker):
         if isinstance(data['plus_mvt'], str):  # instruction == 'standard'
             if data['plus_mvt'] == 'BURNT':
                 new_item['Open'] = False
-                new_wpt = list(data['minus_mvt'][ForwardTracker.WAYPOINT_DEF])
+                new_wpt = list(data['minus_mvt'][self.defwpt])
                 new_wpt[2] = f"BURNT {data['minus_mvt']['SLOC']}"
             elif data['plus_mvt'] == 'PO2ndPartMissing':
                 if data['minus_mvt']['SLOC'].startswith('PO FROM'):
@@ -213,7 +205,7 @@ class ForwardTracker(basetracker.BaseTracker):
                     # the PO for 2+ times in a row
                     return new_item
                 new_item['Open'] = np.nan
-                new_wpt = list(data['minus_mvt'][ForwardTracker.WAYPOINT_DEF])
+                new_wpt = list(data['minus_mvt'][self.defwpt])
                 new_wpt[2] = 'PO FROM %s, mvt %s' % (
                     data['minus_mvt']['SLOC'],
                     data['minus_mvt']['Mvt Code']
@@ -227,7 +219,7 @@ class ForwardTracker(basetracker.BaseTracker):
                 new_item['Waypoints'][0][4] = ''
             
             new_item['Open'] = True
-            new_wpt = list(data['plus_mvt'].loc[ForwardTracker.WAYPOINT_DEF])
+            new_wpt = list(data['plus_mvt'].loc[self.defwpt])
             if new_wpt[2] != 'NA': # Remove SoldTo if SLOC isn't a Consignment
                 new_wpt[3] = np.nan
             if data['minus_mvt']['Mvt Code'] != new_wpt[4]: # Combination of codes
@@ -239,9 +231,9 @@ class ForwardTracker(basetracker.BaseTracker):
             new_item.name = new_item.name + '.' + sub_ID
         return new_item
 
-    @staticmethod
+
     def _find_decr(
-        first_step: bool, wpt: list, mvts: pd.DataFrame, ID: str
+        self, first_step: bool, wpt: list, mvts: pd.DataFrame, ID: str
     ) -> pd.DataFrame:
         if not first_step:
             if wpt[2] == 'NA':  # Add filter on SoldTo if SKU in consignment
@@ -283,9 +275,8 @@ class ForwardTracker(basetracker.BaseTracker):
         return decrement
     
 
-    @staticmethod
     def _find_incr(
-        decr: pd.Series, mvt: pd.DataFrame, nobatch: bool = False
+        self, decr: pd.Series, mvt: pd.DataFrame, nobatch: bool = False
     ) -> pd.DataFrame:
         # Exceptions on top, general case is down
         if decr['Mvt Code'] == '956':  # Change of SoldTo
