@@ -25,7 +25,6 @@ import matplotlib.pyplot as plt
 from product_trailer.user_data import UserData
 
 
-
 class Config():
 
     def __init__(self, config_name: str) -> None:

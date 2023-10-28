@@ -34,4 +34,21 @@ def test_create_profile_directory():
     if profile_exists:
         shutil.rmtree(profile_path)
     assert profile_exists
-    
+
+def test_use_standard_config():
+    config_name = 'test_config'
+    profile_path = Path('profiles') / config_name
+    testcfg = Config(config_name)
+    test = testcfg.config_path == Path('./product_trailer/default_profile/config')
+    shutil.rmtree(profile_path)
+    assert test
+
+def test_use_custom_config():
+    config_name = 'test_config'
+    defaultconfigp = Path('./product_trailer/default_profile')
+    profile_path = Path('profiles') / config_name
+    shutil.copytree(defaultconfigp, profile_path)
+    testcfg = Config(config_name)
+    test = testcfg.config_path == Path(f'./profiles/{config_name}/config')
+    shutil.rmtree(profile_path)
+    assert test
