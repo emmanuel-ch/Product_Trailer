@@ -5,8 +5,17 @@ Tests on Config class.
 from pathlib import Path
 import shutil
 import pytest
+
 from product_trailer.config import Config
 
+
+@pytest.fixture
+def dummy_config():
+    config_name = 'test_config'
+    profile_path = Path('profiles') / config_name
+    testcfg = Config(config_name)
+    yield testcfg
+    shutil.rmtree(profile_path)
 
 
 @pytest.mark.parametrize(
@@ -35,13 +44,8 @@ def test_create_profile_directory():
         shutil.rmtree(profile_path)
     assert profile_exists
 
-def test_use_standard_config():
-    config_name = 'test_config'
-    profile_path = Path('profiles') / config_name
-    testcfg = Config(config_name)
-    test = testcfg.config_path == Path('./product_trailer/default_profile/config')
-    shutil.rmtree(profile_path)
-    assert test
+def test_use_standard_config(dummy_config):
+    assert dummy_config.config_path == Path('./product_trailer/default_profile/config')
 
 def test_use_custom_config():
     config_name = 'test_config'
@@ -53,42 +57,24 @@ def test_use_custom_config():
     shutil.rmtree(profile_path)
     assert test
 
-def test_incr_run_count():
-    config_name = 'test_config'
-    profile_path = Path('profiles') / config_name
-    testcfg = Config(config_name)
-    testcfg.incr_run_count()
-    test = testcfg.user_data.fetch('run_count') == 1
-    shutil.rmtree(profile_path)
-    assert test
+def test_incr_run_count(dummy_config):
+    dummy_config.incr_run_count()
+    assert dummy_config.user_data.fetch('run_count') == 1
 
-def test_find_unprocessed(tmp_path):
-    config_name = 'test_config'
-    profile_path = Path('profiles') / config_name
-    testcfg = Config(config_name)
+def test_find_unprocessed(tmp_path, dummy_config):
     fprefix = 'Some '
     newfilep = tmp_path / (fprefix + 'file 42.txt')
     with open(newfilep, 'w') as newfile:
         newfile.write('bar')
-    test = testcfg.find_unprocessed_files(tmp_path, fprefix) == [str(newfilep)]
-    shutil.rmtree(profile_path)
-    newfilep.unlink()
-    assert test
+    assert dummy_config.find_unprocessed_files(tmp_path, fprefix) == [str(newfilep)]
 
-def test_find_unprocessed_with_preexisting_file(tmp_path):
-    config_name = 'test_config'
-    profile_path = Path('profiles') / config_name
-    testcfg = Config(config_name)
+def test_find_unprocessed_with_preexisting_file(tmp_path, dummy_config):
     fprefix = 'Some '
     newfilep1 = tmp_path / (fprefix + 'file 41.txt')
-    testcfg.record_inputfile_processed(str(newfilep1))
+    dummy_config.record_inputfile_processed(str(newfilep1))
     newfilep2 = tmp_path / (fprefix + 'file 42.txt')
     with open(newfilep1, 'w') as newfile:
         newfile.write('bar')
     with open(newfilep2, 'w') as newfile:
         newfile.write('bar')
-    test = testcfg.find_unprocessed_files(tmp_path, fprefix) == [str(newfilep2)]
-    shutil.rmtree(profile_path)
-    newfilep1.unlink()
-    newfilep2.unlink()
-    assert test
+    assert dummy_config.find_unprocessed_files(tmp_path, fprefix) == [str(newfilep2)]
