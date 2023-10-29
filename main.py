@@ -8,7 +8,7 @@ import argparse
 
 def main() -> None:
     from product_trailer.scheduler import Scheduler
-    from product_trailer.config import Config
+    from product_trailer.profile import Profile
 
     # Arg parser
     parser = argparse.ArgumentParser(
@@ -25,33 +25,33 @@ def main() -> None:
 
 
     print('\n\n', ' PRODUCT-TRAILER '.center(80, '#'), sep='')
-    if not Config.validate_configname(args.profile_name):
+    if not Profile.validate_profilename(args.profile_name):
         print('Profile name not valid.',
               'Characters allowed (max 30): a-z, A-Z, 0-9, -_.,()')
     else:
-        config = Config(args.profile_name)
-        unprocessed_raw_files = config.find_unprocessed_files(
+        profile = Profile(args.profile_name)
+        unprocessed_raw_files = profile.find_unread(
             args.raw_dir,
             args.raw_prefix
         )
         print(f'Detected {len(unprocessed_raw_files)} file(s) not processed.')
         for fpath in unprocessed_raw_files:
-            config.incr_run_count()
+            profile.incr_run_count()
             print(f'File: {fpath}', end='')
-            new_raw_mvt = config.import_movements(fpath)
-            scheduler = Scheduler(config)
+            new_raw_mvt = profile.import_movements(fpath)
+            scheduler = Scheduler(profile)
             scheduler.prepare(new_raw_mvt)
             all_items, mvts_done = scheduler.run()
             print('Saved %s items' % all_items.shape[0])
-            config.save_items(all_items)
-            config.save_movements(mvts_done)
-            config.record_inputfile_processed(fpath)
+            profile.save_items(all_items)
+            profile.save_movements(mvts_done)
+            profile.add_read(fpath)
         
         # Post-processing
         if not args.no_excel_report:
             print('\nPost-processing... ', end='')
-            tracked_items = config.fetch_saved_items()
-            config.postprocess(tracked_items)
+            tracked_items = profile.fetch_items()
+            profile.postprocess(tracked_items)
             print('Finished.')
     
     # End of program

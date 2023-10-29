@@ -80,7 +80,7 @@ class Scheduler:
 
     def _prep_item(self, new_raw_data: pd.DataFrame) -> pd.DataFrame:
         new_tracked_items = self._extract_items(new_raw_data)
-        saved_items = self.config.fetch_saved_items()
+        saved_items = self.config.fetch_items()
         if isinstance(saved_items, pd.DataFrame):
             tracked_items = pd.concat([saved_items, new_tracked_items])
             return tracked_items, saved_items.shape[0]
@@ -92,8 +92,8 @@ class Scheduler:
             .copy()
             .drop(
                 columns=[
-                    *self.config.input_features["company_features"],
-                    *self.config.input_features["sku_features"],
+                    *self.config.input["company_features"],
+                    *self.config.input["sku_features"],
                     "Special Stock Ind Code",
                     "Unit_Value",
                 ]
@@ -119,8 +119,8 @@ class Scheduler:
             'SKU',
             'Batch'
         ]
-        company_features = ['Company', *self.config.input_features['company_features']]
-        sku_features = ['SKU', *self.config.input_features['sku_features']]
+        company_features = ['Company', *self.config.input['company_features']]
+        sku_features = ['SKU', *self.config.input['sku_features']]
         def build_ID(item):
             return (
                 f"_{item['Company']}/{item['SLOC']}/{item['Sold to'][4:11]}_"

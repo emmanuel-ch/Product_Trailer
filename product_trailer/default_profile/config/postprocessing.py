@@ -34,12 +34,12 @@ def postprocess(self, tracked_items: pd.DataFrame) -> bool:
     dt_now = datetime.today().strftime("%Y-%m-%d %Hh%M")
     fsuffix = f'-- Saved {dt_now} -- Range {date_range}'
 
-    self.report_to_excel(
+    self.save_excel(
         {'summary': std_report, 'details': detailed_view},
-        f'Tracked products' + fsuffix + '.xlsx'
+        f'Tracked products' + fsuffix
         )
     
-    self.save_figure(fig, f'Network diagram' + fsuffix + '.png')
+    self.save_figure(fig, f'Network diagram' + fsuffix)
 
 
 def customize_std_report(tracked_Items: pd.DataFrame) -> pd.DataFrame:

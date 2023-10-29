@@ -1,10 +1,12 @@
-[database]
-fname_tracked_items = 'Tracked _'
-fname_movements = 'All movements _'
-only_keep_latest_version = true
+[data]
+fname_items = 'Item '
+fname_movements = 'Movement '
+no_history = true
 save_movements = false
-reports_path = ''
 
-[input_data]
+[input]
 sku_features = ['Brand', 'Category']
 company_features = ['Country']
+
+[output]
+path = ''
