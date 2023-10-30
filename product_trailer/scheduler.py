@@ -5,8 +5,8 @@ Class Scheduler - methods:
     .__init__
     .prepare
     .run
-    ._prep_mvt
     ._prep_item
+    ._prep_mvt
     ._extract_items
 """
 
@@ -60,11 +60,11 @@ class Scheduler:
         for task in (pbar := tqdm.tqdm(self.tasklist, desc='Crunching... ')):
             pbar.set_postfix({'Object': task}, refresh=False)
             add_items, add_mvts = (
-                ForwardTracker(Scheduler.DEF_WPT)
-                .do_task(
-                    self.items_todo.loc[(self.items_todo['SKU'] == task)],
+                ForwardTracker(
+                    Scheduler.DEF_WPT,
                     self.mvts.loc[(self.mvts['SKU'] == task)]
                 )
+                .do_task(self.items_todo.loc[(self.items_todo['SKU'] == task)])
             )
             self.items_done.append(add_items)
             if self.config.db_config['save_movements']:
