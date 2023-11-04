@@ -153,3 +153,85 @@ class Test_find_decr:
             '_some_ID'
         )
         assert list(decrements.index) == [8]
+
+class Test_find_incr:
+    def test__find_incr_case1_std(self):
+        ft = make_ForwardTracker('tests/test_data/mvts_1.csv')
+        increments = ft._find_incr(
+            decr=pd.Series(
+                {
+                    'Posting Date': pd.to_datetime('01/01/2023'),
+                    'Company': '1100',
+                    'Sold to': '',
+                    'Batch': 'b0101',
+                    'Mvt Code': 'C01',
+                    'Document': 'DOC001',
+                    'PO': '-2'
+                }
+            )
+        )
+        assert list(increments.index) == [0, 4]
+    
+    def test__find_incr_case2_changesoldto(self):
+        ft = make_ForwardTracker('tests/test_data/mvts_1.csv')
+        increments = ft._find_incr(
+            decr=pd.Series(
+                {
+                    'Posting Date': pd.to_datetime('01/01/2023'),
+                    'Company': '1100',
+                    'Batch': 'b0101',
+                    'Mvt Code': '956',
+                    'PO': '-2'
+                }
+            )
+        )
+        assert list(increments.index) == [10]
+
+    def test__find_incr_case3_changebatch(self):
+        ft = make_ForwardTracker('tests/test_data/mvts_1.csv')
+        increments = ft._find_incr(
+            decr=pd.Series(
+                {
+                    'Posting Date': pd.to_datetime('01/01/2023'),
+                    'Company': '1100',
+                    'SLOC': 'SLOC_1',
+                    'Sold to': '',
+                    'Mvt Code': '702',
+                    'PO': '-2'
+                }
+            )
+        )
+        assert list(increments.index) == [11]
+    
+    def test__find_incr_case4_po(self):
+        ft = make_ForwardTracker('tests/test_data/mvts_1.csv')
+        increments = ft._find_incr(
+            decr=pd.Series(
+                {
+                    'Posting Date': pd.to_datetime('01/01/2023'),
+                    'Batch': 'b0101',
+                    'PO': 'PO001',
+                    'Mvt Code': 'something'
+                }
+            )
+        )
+        assert list(increments.index) == [4, 15]
+    
+    def test__find_incr_case5_nobatch(self):
+        ft = make_ForwardTracker('tests/test_data/mvts_1.csv')
+        increments = ft._find_incr(
+            decr=pd.Series(
+                {
+                    'Posting Date': pd.to_datetime('01/01/2023'),
+                    'Company': '1100',
+                    'Sold to': '',
+                    'Mvt Code': 'C01',
+                    'Document': 'DOC001',
+                    'PO': '-2'
+                }
+            ),
+            nobatch=True
+        )
+        #FIXME: shouldn't take a +mvt coming from a PO! (row 4)
+        assert list(increments.index) == [0, 4]
+    
