@@ -70,16 +70,14 @@ Profiles are stored under ./profiles/
 4. You're ready to go!
 
 ### Requirements
-Developed on Python 3.11. 
+Developed on Python 3.11.  
 Conda environment can be imported from env.yml.
 Non-standard packages used:
 - openpyxl
 - numpy
 - pandas
-- python=3.11
 - tqdm
 - pytest
-- line_profiler
 - networkx
 - matplotlib
 - xlsx2csv
@@ -87,9 +85,12 @@ Non-standard packages used:
 
 ## Contributing
 
-You found this repo and you like it? Feel free to get in touch or to raise an issue!  
+You found this repo interesting and you like it? Feel free to get in touch or to raise an issue!  
 Pull requests welcome. For major changes, please open an issue first to discuss what you would like to change.  
-You could get involved by...
-- Using different input format, and increasing speed of Excel imports
-- Increase overall performance (speed)
-- Propose different output format, including graphical representations
+You may want to dive into...
+- Use different input formats (XML, JSON, SQL connection, etc.)
+- Improve test suite
+- Increase overall performance (speed, memory usage)
+- Propose different output formats, including graphical representations
+- Propose a RetroTracker class: Track products backwards
+- ...
