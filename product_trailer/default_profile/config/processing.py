@@ -59,14 +59,26 @@ def import_movements(filepath: str) -> pd.DataFrame:
             fdata = StringIO()
             Xlsx2csv(filepath).convert(fdata)
             fdata.seek(0)
+            raw_mvt = pd.read_csv(
+                fdata,
+                low_memory=False,
+                dtype=inputcols_dtypes,
+                parse_dates=['Posting Date'],
+            )
         case '.csv':
             fdata = fp
+            raw_mvt = pd.read_csv(
+                fdata,
+                low_memory=False,
+                dtype=inputcols_dtypes,
+                parse_dates=['Posting Date'],
+                date_format='%d/%m/%Y'
+            )
         case _:
             raise Exception('File type not supported')
 
     raw_mvt = (
-        pd.read_csv(fdata, low_memory=False,
-                    dtype=inputcols_dtypes, parse_dates=['Posting Date'])
+        raw_mvt
         .rename(columns=renaming_dict)
         .pipe(lambda df: df.loc[df['Material Type Code'] == 'FERT'])
         .sort_values(by=['Posting Date', 'QTY'], ascending=[True, False])

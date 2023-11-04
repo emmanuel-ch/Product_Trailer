@@ -2,7 +2,6 @@
 Tests on ForwardTracker class.
 """
 
-import pytest
 import pandas as pd
 
 from product_trailer.forwardtracker import ForwardTracker
