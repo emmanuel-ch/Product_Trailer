@@ -39,117 +39,117 @@ def make_ForwardTracker(mvtfp):
     )
     return tracker
 
+class Test_find_decr:
+    def test__find_decr_case1_std(self):
+        ft = make_ForwardTracker('tests/test_data/mvts_1.csv')
+        decrements = ft._find_decr(
+            False,
+            [
+                pd.to_datetime('01/01/2023'),
+                '1100',
+                'SLOC_1',
+                'NA',
+                '',
+                'b0101'
+            ],
+            '_some_ID'
+        )
+        assert list(decrements.index) == [3, 5, 9]
 
-def test__find_decr_case1_std():
-    ft = make_ForwardTracker('tests/test_data/mvts_1.csv')
-    decrements = ft._find_decr(
-        False,
-        [
-            pd.to_datetime('01/01/2023'),
-            '1100',
-            'SLOC_1',
-            'NA',
-            '',
-            'b0101'
-        ],
-        '_some_ID'
-    )
-    assert list(decrements.index) == [3, 5, 9]
+    def test__find_decr_case2_itemallocated(self):
+        ft = make_ForwardTracker('tests/test_data/mvts_1.csv')
+        ft.mvts['Items_Allocated'].iloc[3] = ['_some_ID']
+        decrements = ft._find_decr(
+            False,
+            [
+                pd.to_datetime('01/01/2023'),
+                '1100',
+                'SLOC_1',
+                'NA',
+                '',
+                'b0101'
+            ],
+            '_some_ID'
+        )
+        assert list(decrements.index) == [5, 9]
 
-def test__find_decr_case2_itemallocated():
-    ft = make_ForwardTracker('tests/test_data/mvts_1.csv')
-    ft.mvts['Items_Allocated'].iloc[3] = ['_some_ID']
-    decrements = ft._find_decr(
-        False,
-        [
-            pd.to_datetime('01/01/2023'),
-            '1100',
-            'SLOC_1',
-            'NA',
-            '',
-            'b0101'
-        ],
-        '_some_ID'
-    )
-    assert list(decrements.index) == [5, 9]
+    def test__find_decr_case3_date(self):
+        ft = make_ForwardTracker('tests/test_data/mvts_1.csv')
+        decrements = ft._find_decr(
+            False,
+            [
+                pd.to_datetime('02/01/2023'),
+                '1100',
+                'SLOC_1',
+                'NA',
+                '',
+                'b0101'
+            ],
+            '_some_ID'
+        )
+        assert list(decrements.index) == []
 
-def test__find_decr_case3_date():
-    ft = make_ForwardTracker('tests/test_data/mvts_1.csv')
-    decrements = ft._find_decr(
-        False,
-        [
-            pd.to_datetime('02/01/2023'),
-            '1100',
-            'SLOC_1',
-            'NA',
-            '',
-            'b0101'
-        ],
-        '_some_ID'
-    )
-    assert list(decrements.index) == []
+    def test__find_decr_case4_qtyunallocated(self):
+        ft = make_ForwardTracker('tests/test_data/mvts_1.csv')
+        ft.mvts['QTY_Unallocated'].iloc[5] = 0
+        decrements = ft._find_decr(
+            False,
+            [
+                pd.to_datetime('01/01/2023'),
+                '1100',
+                'SLOC_1',
+                'NA',
+                '',
+                'b0101'
+            ],
+            '_some_ID'
+        )
+        assert list(decrements.index) == [3, 9]
 
-def test__find_decr_case4_qtyunallocated():
-    ft = make_ForwardTracker('tests/test_data/mvts_1.csv')
-    ft.mvts['QTY_Unallocated'].iloc[5] = 0
-    decrements = ft._find_decr(
-        False,
-        [
-            pd.to_datetime('01/01/2023'),
-            '1100',
-            'SLOC_1',
-            'NA',
-            '',
-            'b0101'
-        ],
-        '_some_ID'
-    )
-    assert list(decrements.index) == [3, 9]
+    def test__find_decr_case5_soldto(self):
+        ft = make_ForwardTracker('tests/test_data/mvts_1.csv')
+        decrements = ft._find_decr(
+            False,
+            [
+                pd.to_datetime('01/01/2023'),
+                '1100',
+                'NA',
+                '0000222222',
+                '',
+                'b0101'
+            ],
+            '_some_ID'
+        )
+        assert list(decrements.index) == [8]
 
-def test__find_decr_case5_soldto():
-    ft = make_ForwardTracker('tests/test_data/mvts_1.csv')
-    decrements = ft._find_decr(
-        False,
-        [
-            pd.to_datetime('01/01/2023'),
-            '1100',
-            'NA',
-            '0000222222',
-            '',
-            'b0101'
-        ],
-        '_some_ID'
-    )
-    assert list(decrements.index) == [8]
+    def test__find_decr_case6_firstmvt(self):
+        ft = make_ForwardTracker('tests/test_data/mvts_1.csv')
+        decrements = ft._find_decr(
+            True,
+            [
+                pd.to_datetime('01/01/2023'),
+                '1100',
+                'SLOC_2',
+                '',
+                'C02',
+                'b0101'
+            ],
+            '_some_ID'
+        )
+        assert list(decrements.index) == [1]
 
-def test__find_decr_case6_firstmvt():
-    ft = make_ForwardTracker('tests/test_data/mvts_1.csv')
-    decrements = ft._find_decr(
-        True,
-        [
-            pd.to_datetime('01/01/2023'),
-            '1100',
-            'SLOC_2',
-            '',
-            'C02',
-            'b0101'
-        ],
-        '_some_ID'
-    )
-    assert list(decrements.index) == [1]
-
-def test__find_decr_case7_firstmvtinconsignment():
-    ft = make_ForwardTracker('tests/test_data/mvts_1.csv')
-    decrements = ft._find_decr(
-        True,
-        [
-            pd.to_datetime('01/01/2023'),
-            '1100',
-            'NA',
-            '0000222222',
-            'C01',
-            'b0101'
-        ],
-        '_some_ID'
-    )
-    assert list(decrements.index) == [8]
+    def test__find_decr_case7_firstmvtinconsignment(self):
+        ft = make_ForwardTracker('tests/test_data/mvts_1.csv')
+        decrements = ft._find_decr(
+            True,
+            [
+                pd.to_datetime('01/01/2023'),
+                '1100',
+                'NA',
+                '0000222222',
+                'C01',
+                'b0101'
+            ],
+            '_some_ID'
+        )
+        assert list(decrements.index) == [8]
