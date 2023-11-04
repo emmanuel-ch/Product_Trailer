@@ -14,7 +14,7 @@ from product_trailer.scheduler import Scheduler
 
 @pytest.fixture(scope='module')
 def dummy_extract():
-    profile_name = 'test_profile'
+    profile_name = 'test_profile_scheduler1'
     profile_path = Path('profiles') / profile_name
     testprofile = Profile(profile_name)
     scheduler = Scheduler(testprofile)
@@ -49,6 +49,38 @@ class Test_extract_items:
         )
 
 
-# Tests on _prep_mvt:
-# dtypes
-# 
+@pytest.fixture(scope='module')
+def dummy_mvts():
+    profile_name = 'test_profile_scheduler2'
+    profile_path = Path('profiles') / profile_name
+    testprofile = Profile(profile_name)
+    scheduler = Scheduler(testprofile)
+    imported = testprofile.import_movements('tests/test_data/raw_mvts2.xlsx')
+    scheduler.tasklist = list(imported['SKU'].unique())
+    mvts = scheduler._prep_mvt(imported)
+    yield mvts
+    shutil.rmtree(profile_path)
+
+class Test_prep_mvt:
+    def test_prep_mvt_len(self, dummy_mvts):
+        assert len(dummy_mvts) == 17
+
+    def test_prep_mvt_dtypes(self, dummy_mvts):
+        assert (
+            (
+                list(dummy_mvts.select_dtypes('category').columns)
+                == ['Company', 'PO', 'Mvt Code', 'SLOC', 'Sold to', 'SKU']
+            )
+            and (
+                list(dummy_mvts.select_dtypes('datetime').columns)
+                == ['Posting Date']
+            )
+            and (
+                list(dummy_mvts.select_dtypes('object').columns)
+                == ['Document', 'Batch', 'Items_Allocated', 'Company_SLOC_Batch']
+            )
+            and (
+                list(dummy_mvts.select_dtypes('number').columns)
+                == ['QTY', 'QTY_Unallocated']
+            )
+        )

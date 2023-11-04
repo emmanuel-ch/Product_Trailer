@@ -18,7 +18,7 @@ from product_trailer.forwardtracker import ForwardTracker
 
 
 class Scheduler:
-    DEF_WPT = ['Posting Date', 'Company', 'SLOC', 'Sold to', 'Mvt Code', 'Batch']
+    DEF_WPT = ['Posting Date','Company','SLOC','Sold to','Mvt Code','Batch']
     
     def __init__(self, profile):
         self.profile = profile
@@ -27,21 +27,13 @@ class Scheduler:
         items, num_retrieved = self._prep_item(new_raw_data)
         self.items_todo = items.loc[items['Open'].fillna(True)].copy()
         self.items_done = [items.loc[~items['Open'].fillna(True)].copy()]
-
-        self.tasklist = (
-            self.items_todo
-            .value_counts(['SKU'])
-            .loc[self.items_todo.value_counts(['SKU']).gt(0)]
-            .reset_index()['SKU']
-            .to_list()
-        )
-
+        self.tasklist = self._make_tasklist()
         self.mvts = self._prep_mvt(new_raw_data)
         self.mvts_done = []
 
         return {
-            'items': (
-                '%s items incl. %s retrieved. %s to do, %s closed.'
+           'items': (
+               '%s items incl. %s retrieved. %s to do, %s closed.'
                 % (
                     len(items),
                     num_retrieved,
@@ -49,15 +41,15 @@ class Scheduler:
                     len(self.items_done)
                 )
             ),
-            'mvts': (
-                'total %s mvts utilized of total %s'
+           'mvts': (
+               'total %s mvts utilized of total %s'
                 % (self.mvts.shape[0], new_raw_data.shape[0])
             ),
         }
 
     
     def run(self):
-        for task in (pbar := tqdm.tqdm(self.tasklist, desc='Crunching... ')):
+        for task in (pbar := tqdm.tqdm(self.tasklist, desc='Crunching...')):
             pbar.set_postfix({'Object': task}, refresh=False)
             add_items, add_mvts = (
                 ForwardTracker(
@@ -86,38 +78,47 @@ class Scheduler:
             return tracked_items, saved_items.shape[0]
         return new_tracked_items, 0
     
+    def _make_tasklist(self):
+        return (
+            self.items_todo
+            .value_counts(['SKU'])
+            .loc[self.items_todo.value_counts(['SKU']).gt(0)]
+            .reset_index()['SKU']
+            .to_list()
+        )
+    
     def _prep_mvt(self, new_raw_mvt: pd.DataFrame) -> pd.DataFrame:
         return (
-            new_raw_mvt.loc[new_raw_mvt["SKU"].isin(self.tasklist)]
+            new_raw_mvt.loc[new_raw_mvt['SKU'].isin(self.tasklist)]
             .copy()
             .drop(
                 columns=[
-                    *self.profile.input["company_features"],
-                    *self.profile.input["sku_features"],
-                    "Special Stock Ind Code",
-                    "Unit_Value",
+                    *self.profile.input['company_features'],
+                    *self.profile.input['sku_features'],
+                    'Special Stock Ind Code',
+                    'Unit_Value',
                 ]
             )
             .assign(
-                QTY_Unallocated=lambda df: df["QTY"].apply(abs),
+                QTY_Unallocated=lambda df: df['QTY'].apply(abs),
                 Items_Allocated=lambda df: df.apply(
-                    lambda _: set(), result_type="reduce", axis=1
+                    lambda _: set(), result_type='reduce', axis=1
                 ),
-                Company_SLOC_Batch=lambda df: df[["Company", "SLOC", "Batch"]].apply(
-                    lambda row: "-".join(row), axis=1
+                Company_SLOC_Batch=lambda df: df[['Company', 'SLOC', 'Batch']].apply(
+                    lambda row: '-'.join(row), axis=1
                 ),
             )
         )
 
     def _extract_items(self, raw_mvt: pd.DataFrame) -> pd.DataFrame:
         ID_definition = [
-            'Company',
-            'SLOC',
-            'Sold to',
-            'Mvt Code',
-            'Posting Date',
-            'SKU',
-            'Batch'
+           'Company',
+           'SLOC',
+           'Sold to',
+           'Mvt Code',
+           'Posting Date',
+           'SKU',
+           'Batch'
         ]
         company_features = ['Company', *self.profile.input['company_features']]
         sku_features = ['SKU', *self.profile.input['sku_features']]
@@ -134,7 +135,7 @@ class Scheduler:
             .pivot_table(
                 observed=True,
                 values=['Unit_Value', 'QTY'],
-                aggfunc={'Unit_Value': 'mean', 'QTY': 'sum'},
+                aggfunc={'Unit_Value': 'mean','QTY': 'sum'},
                 index=ID_definition
             )
             .reset_index()
@@ -161,14 +162,14 @@ class Scheduler:
             .rename(columns={'Country': 'First_Country'})
             [
                 [
-                    'First_Country',
-                    'SKU',
-                    'QTY',
-                    'Open',
-                    'Waypoints',
-                    'Unit_Value',
-                    'Brand',
-                    'Category'
+                   'First_Country',
+                   'SKU',
+                   'QTY',
+                   'Open',
+                   'Waypoints',
+                   'Unit_Value',
+                   'Brand',
+                   'Category'
                 ]
             ]
         )
