@@ -44,8 +44,8 @@ def main() -> None:
             all_items, mvts_done = scheduler.run()
             print('Saved %s items' % all_items.shape[0])
             profile.save_items(all_items)
-            profile.save_movements(mvts_done)
             profile.add_read(fpath)
+            profile.save_movements(mvts_done)
         
         # Post-processing
         if not args.no_excel_report:

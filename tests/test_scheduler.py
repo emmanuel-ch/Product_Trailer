@@ -1,0 +1,54 @@
+""" test_scheduler.py
+Tests on Scheduler class.
+"""
+
+from pathlib import Path
+import shutil
+
+import pytest
+import pandas as pd
+
+from product_trailer.profile import Profile
+from product_trailer.scheduler import Scheduler
+
+
+@pytest.fixture(scope='module')
+def dummy_extract():
+    profile_name = 'test_profile'
+    profile_path = Path('profiles') / profile_name
+    testprofile = Profile(profile_name)
+    scheduler = Scheduler(testprofile)
+    imported = testprofile.import_movements('tests/test_data/raw_mvts2.xlsx')
+    extracted = scheduler._extract_items(imported)
+    yield extracted
+    shutil.rmtree(profile_path)
+
+
+class Test_extract_items:
+    def test__extract_items_number(self, dummy_extract):
+        assert len(dummy_extract) == 8
+
+    def test__extract_items_totalqty(self, dummy_extract):
+        assert dummy_extract['QTY'].sum() == 12
+
+    def test__extract_items_noduplicates(self, dummy_extract):
+        assert not any(dummy_extract.index.duplicated())
+
+    def test__extract_items_positiveqty(self, dummy_extract):
+        assert all(dummy_extract['QTY'] > 0)
+
+    def test__extract_items_dtypes(self, dummy_extract):
+        assert (
+            (
+                list(dummy_extract.select_dtypes('category').columns)
+                == ['First_Country', 'SKU', 'Brand', 'Category']
+            )
+            and (list(dummy_extract.select_dtypes('number').columns) == ['QTY', 'Unit_Value'])
+            and (list(dummy_extract.select_dtypes(bool).columns) == ['Open'])
+            and (list(dummy_extract.select_dtypes('object').columns) == ['Waypoints'])
+        )
+
+
+# Tests on _prep_mvt:
+# dtypes
+# 

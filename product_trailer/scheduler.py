@@ -20,8 +20,8 @@ from product_trailer.forwardtracker import ForwardTracker
 class Scheduler:
     DEF_WPT = ['Posting Date', 'Company', 'SLOC', 'Sold to', 'Mvt Code', 'Batch']
     
-    def __init__(self, config):
-        self.config = config
+    def __init__(self, profile):
+        self.profile = profile
     
     def prepare(self, new_raw_data):
         items, num_retrieved = self._prep_item(new_raw_data)
@@ -67,7 +67,7 @@ class Scheduler:
                 .do_task(self.items_todo.loc[(self.items_todo['SKU'] == task)])
             )
             self.items_done.append(add_items)
-            if self.config.db_config['save_movements']:
+            if self.profile.db_config['save_movements']:
                 self.mvts_done.append(add_mvts)
         
         all_items = pd.concat(self.items_done, axis=0)
@@ -80,7 +80,7 @@ class Scheduler:
 
     def _prep_item(self, new_raw_data: pd.DataFrame) -> pd.DataFrame:
         new_tracked_items = self._extract_items(new_raw_data)
-        saved_items = self.config.fetch_items()
+        saved_items = self.profile.fetch_items()
         if isinstance(saved_items, pd.DataFrame):
             tracked_items = pd.concat([saved_items, new_tracked_items])
             return tracked_items, saved_items.shape[0]
@@ -92,8 +92,8 @@ class Scheduler:
             .copy()
             .drop(
                 columns=[
-                    *self.config.input["company_features"],
-                    *self.config.input["sku_features"],
+                    *self.profile.input["company_features"],
+                    *self.profile.input["sku_features"],
                     "Special Stock Ind Code",
                     "Unit_Value",
                 ]
@@ -119,8 +119,8 @@ class Scheduler:
             'SKU',
             'Batch'
         ]
-        company_features = ['Company', *self.config.input['company_features']]
-        sku_features = ['SKU', *self.config.input['sku_features']]
+        company_features = ['Company', *self.profile.input['company_features']]
+        sku_features = ['SKU', *self.profile.input['sku_features']]
         def build_ID(item):
             return (
                 f"_{item['Company']}/{item['SLOC']}/{item['Sold to'][4:11]}_"
@@ -130,7 +130,7 @@ class Scheduler:
         
         trailed_products = (
             raw_mvt.copy()
-            .pipe(lambda df: df.loc[self.config.is_entry_point(df)])
+            .pipe(lambda df: df.loc[self.profile.is_entry_point(df)])
             .pivot_table(
                 observed=True,
                 values=['Unit_Value', 'QTY'],

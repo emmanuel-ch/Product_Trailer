@@ -12,17 +12,12 @@ def dummy_mvts():
 
 def test_import_dtype(dummy_mvts):
     assert (
-        (
-            list(dummy_mvts.select_dtypes('number').columns)
-            == ['QTY', 'Unit_Value']
-        )
+        (list(dummy_mvts.select_dtypes('datetime').columns) == ['Posting Date'])
+        and (list(dummy_mvts.select_dtypes('number').columns) == ['QTY', 'Unit_Value'])
+        and (list(dummy_mvts.select_dtypes('object').columns) == ['Document', 'Batch'])
         and (
-            list(dummy_mvts.select_dtypes('object').columns)
-            == ['Document', 'Batch']
-        )
-        and (
-            list(dummy_mvts.select_dtypes('category').columns) ==
-            [
+            list(dummy_mvts.select_dtypes('category').columns)
+            == [
                 'Company', 'Country', 'PO', 'Special Stock Ind Code',
                 'Mvt Code', 'SLOC', 'Sold to', 'Brand', 'Category', 'SKU'
             ]

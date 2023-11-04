@@ -25,7 +25,8 @@ class ForwardTracker():
     ) -> None:
         self.mvts = task_mvts
         self.defwpt = defwpt
-
+    
+    
     def do_task(
         self,
         task_items: pd.DataFrame,
@@ -33,13 +34,13 @@ class ForwardTracker():
         if len(self.mvts) == 0:  # No mvt => Skip this
             return task_items, self.mvts
         items_computed = []  # list of pd.Series
-        for _, row in task_items.iterrows():
-            items_computed.extend(self._make_route(row))
+        for _, item in task_items.iterrows():
+            items_computed.extend(self._make_route(item))
         df_items_computed = pd.DataFrame(items_computed)
-        
         return df_items_computed, self.mvts
 
-    def _make_route(self, item: pd.Series) -> list:
+
+    def _make_route(self, item: pd.Series) -> list[pd.Series]:
         new_items = self._make_hop(item)
         if len(new_items) == 0:
             return []
