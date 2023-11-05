@@ -6,7 +6,6 @@ from pathlib import Path
 import shutil
 
 import pytest
-import pandas as pd
 
 from product_trailer.profile import Profile
 from product_trailer.scheduler import Scheduler

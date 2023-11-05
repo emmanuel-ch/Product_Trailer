@@ -14,10 +14,10 @@ from product_trailer.profile import Profile
 
 @pytest.fixture
 def dummy_profile():
-    config_name = 'test_profile'
-    profile_path = Path('profiles') / config_name
-    testcfg = Profile(config_name)
-    yield testcfg
+    profile_name = 'test_profile'
+    profile_path = Path('profiles') / profile_name
+    testprofile = Profile(profile_name)
+    yield testprofile
     shutil.rmtree(profile_path)
 
 

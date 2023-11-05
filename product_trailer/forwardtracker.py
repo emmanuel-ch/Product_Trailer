@@ -141,47 +141,6 @@ class ForwardTracker():
                 )
             )
         return new_items
-    
-
-    def _compute_incr(
-        self,
-        minus_mvt: pd.Series,
-        desired_QTY: int,
-        ID: str
-    ) -> list:
-        """Tried to find the [+] mvts: where the product has moved to.
-        minus_mvt: Info about the [-] mvt
-        desired_QTY: the quantity we track
-        task_MVTs: A df containing movements"""
-        plus_mvts = self._find_incr(minus_mvt)
-
-        if len(plus_mvts) == 0:  # No 1st-pass result for a +1: we widen the search
-            # Except if we were looking for 2nd half of PO
-            if minus_mvt['PO'] != '-2':
-                return [{'qty': desired_QTY, 'plus_mvt': 'PO2ndPartMissing'}]
-            # Last chance to find a [+]: we remove the filter on batch#
-            plus_mvts = self._find_incr(minus_mvt, True) 
-            if len(plus_mvts) == 0:  # Part is burnt or is on a PO
-                return [{'qty': desired_QTY, 'plus_mvt': 'BURNT'}]
-        
-        QTY_covered = 0
-        plus_resolved = []
-        for plus_idx, plus_mvt in plus_mvts.iterrows():
-            addnl_cover_QTY = min(plus_mvt.QTY, desired_QTY-QTY_covered)
-            plus_resolved.append({'qty': addnl_cover_QTY, 'plus_mvt': plus_mvt})
-            self.mvts.loc[plus_idx, 'QTY_Unallocated'] -= addnl_cover_QTY
-            self.mvts.loc[plus_idx, 'Items_Allocated'].add(ID)
-            QTY_covered += addnl_cover_QTY
-            if QTY_covered >= desired_QTY:
-                break
-        
-        if QTY_covered < desired_QTY:
-            # Ex: found 4 [+] for 5 [-]: assume the last unit was burnt
-            plus_resolved.append(
-                {'qty': desired_QTY-QTY_covered, 'plus_mvt': 'BURNT'}
-            )
-        
-        return plus_resolved
 
 
     def _build_item(
@@ -233,6 +192,47 @@ class ForwardTracker():
         if sub_ID:
             new_item.name = new_item.name + '.' + sub_ID
         return new_item
+
+
+    def _compute_incr(
+        self,
+        minus_mvt: pd.Series,
+        desired_QTY: int,
+        ID: str
+    ) -> list:
+        """Tried to find the [+] mvts: where the product has moved to.
+        minus_mvt: Info about the [-] mvt
+        desired_QTY: the quantity we track
+        task_MVTs: A df containing movements"""
+        plus_mvts = self._find_incr(minus_mvt)
+
+        if len(plus_mvts) == 0:  # No 1st-pass result for a +1: we widen the search
+            # Except if we were looking for 2nd half of PO
+            if minus_mvt['PO'] != '-2':
+                return [{'qty': desired_QTY, 'plus_mvt': 'PO2ndPartMissing'}]
+            # Last chance to find a [+]: we remove the filter on batch#
+            plus_mvts = self._find_incr(minus_mvt, True) 
+            if len(plus_mvts) == 0:  # Part is burnt or is on a PO
+                return [{'qty': desired_QTY, 'plus_mvt': 'BURNT'}]
+        
+        QTY_covered = 0
+        plus_resolved = []
+        for plus_idx, plus_mvt in plus_mvts.iterrows():
+            addnl_cover_QTY = min(plus_mvt.QTY, desired_QTY-QTY_covered)
+            plus_resolved.append({'qty': addnl_cover_QTY, 'plus_mvt': plus_mvt})
+            self.mvts.loc[plus_idx, 'QTY_Unallocated'] -= addnl_cover_QTY
+            self.mvts.loc[plus_idx, 'Items_Allocated'].add(ID)
+            QTY_covered += addnl_cover_QTY
+            if QTY_covered >= desired_QTY:
+                break
+        
+        if QTY_covered < desired_QTY:
+            # Ex: found 4 [+] for 5 [-]: assume the last unit was burnt
+            plus_resolved.append(
+                {'qty': desired_QTY-QTY_covered, 'plus_mvt': 'BURNT'}
+            )
+        
+        return plus_resolved
 
 
     def _find_decr(

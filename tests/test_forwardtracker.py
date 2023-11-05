@@ -2,10 +2,19 @@
 Tests on ForwardTracker class.
 """
 
-import pandas as pd
+from pathlib import Path
+import shutil
 
+import numpy as np
+import pandas as pd
+import pytest
+
+from product_trailer.profile import Profile
+from product_trailer.scheduler import Scheduler
 from product_trailer.forwardtracker import ForwardTracker
 
+
+WPT_DEF = ['Posting Date', 'Company', 'SLOC', 'Sold to', 'Mvt Code', 'Batch']
 
 def make_ForwardTracker(mvtfp):
     mvts = (
@@ -32,11 +41,7 @@ def make_ForwardTracker(mvtfp):
                 ),
         )
     )
-    tracker = ForwardTracker(
-        ['Posting Date', 'Company', 'SLOC', 'Sold to', 'Mvt Code', 'Batch'],
-        mvts
-    )
-    return tracker
+    return ForwardTracker(WPT_DEF, mvts)
 
 class Test_find_decr:
     def test__find_decr_case1_std(self):
@@ -233,4 +238,176 @@ class Test_find_incr:
         )
         #FIXME: shouldn't take a +mvt coming from a PO! (row 4)
         assert list(increments.index) == [0, 4]
-    
+
+@pytest.fixture()
+def dummy_mvts(request):
+    profile_name = 'test_profile_scheduler3'
+    profile_path = Path('profiles') / profile_name
+    testprofile = Profile(profile_name)
+    scheduler = Scheduler(testprofile)
+    imported = testprofile.import_movements(request.param)
+    scheduler.tasklist = list(imported['SKU'].unique())
+    mvts = scheduler._prep_mvt(imported)
+    yield mvts
+    shutil.rmtree(profile_path)
+
+class Test_make_route:
+    @pytest.mark.parametrize(
+        'dummy_mvts', ['tests/test_data/fwt_case1.xlsx'], indirect=True
+    )
+    def test_case1_simpletransfer(self, dummy_mvts):  # DC = DecrementIncrement
+        tracker = ForwardTracker(WPT_DEF, dummy_mvts)
+        ini_item = pd.Series(
+            {
+                'First_Country': 'SomeCountry',
+                'SKU': 'SomeSKU',
+                'QTY': 1,
+                'Open': True,
+                'Waypoints': [
+                    [pd.NaT, '3500', 'NA', '0000111111', '', '2002FON6440'],
+                    [pd.Timestamp('2023-01-17'), '3500', '00299', 'NA', '632', '2002FON6440']
+                ],
+                'Unit_Value': 10,
+                'Brand': 'SomeBrand',
+                'Category': 'SomeCategory'
+            }
+        )
+        expected_item = ini_item.copy()
+        expected_item.Waypoints.append(
+            [pd.Timestamp('2023-01-18'), '3500', '00213', np.nan, '311', '2002FON6440']
+        )
+        assert tracker._make_route(ini_item)[0].equals(expected_item)
+
+    @pytest.mark.parametrize(
+        'dummy_mvts', ['tests/test_data/fwt_case2.xlsx'], indirect=True
+    )
+    def test_case2_2transfers(self, dummy_mvts):
+        tracker = ForwardTracker(WPT_DEF, dummy_mvts)
+        ini_item = pd.Series(
+            {
+                'First_Country': 'SomeCountry',
+                'SKU': 'SomeSKU',
+                'QTY': 1,
+                'Open': True,
+                'Waypoints': [
+                    [pd.Timestamp('2023-01-19'), '3100', 'NA', '0000449493', '632', '2210OZS1496']
+                ],
+                'Unit_Value': 10,
+                'Brand': 'SomeBrand',
+                'Category': 'SomeCategory'
+            }
+        )
+        expected_item = ini_item.copy()
+        expected_item.Waypoints = [
+            [pd.NaT, '3100', 'NA', '0000449493', '', '2210OZS1496'],
+            [pd.Timestamp('2023-01-19'), '3100', '00209', np.nan, '632', '2210OZS1496'],
+            [pd.Timestamp('2023-01-19'), '3100', '00204', np.nan, '311', '2210OZS1496']
+        ]
+        assert tracker._make_route(ini_item)[0].equals(expected_item)
+
+    @pytest.mark.parametrize(
+        'dummy_mvts', ['tests/test_data/fwt_case3.xlsx'], indirect=True
+    )
+    def test_case3_incrementotherbatch(self, dummy_mvts):
+        tracker = ForwardTracker(WPT_DEF, dummy_mvts)
+        ini_item = pd.Series(
+            {
+                'First_Country': 'SomeCountry',
+                'SKU': 'SomeSKU',
+                'QTY': 1,
+                'Open': True,
+                'Waypoints': [
+                    [pd.Timestamp('2023-01-19'), '3100', 'NA', '0000449493', '632', '2210OZS1496']
+                ],
+                'Unit_Value': 10,
+                'Brand': 'SomeBrand',
+                'Category': 'SomeCategory'
+            }
+        )
+        expected_item = ini_item.copy()
+        expected_item.Waypoints = [
+            [pd.NaT, '3100', 'NA', '0000449493', '', '2210OZS1496'],
+            [pd.Timestamp('2023-01-19'), '3100', '00209', np.nan, '632', '2210OZS1496'],
+            [pd.Timestamp('2023-01-19'), '3100', '00204', np.nan, '311', '2210O000000']
+        ]
+        assert tracker._make_route(ini_item)[0].equals(expected_item)
+
+    @pytest.mark.parametrize(
+        'dummy_mvts', ['tests/test_data/fwt_case4.xlsx'], indirect=True
+    )
+    def test_case4_burnt(self, dummy_mvts):
+        tracker = ForwardTracker(WPT_DEF, dummy_mvts)
+        ini_item = pd.Series(
+            {
+                'First_Country': 'SomeCountry',
+                'SKU': 'SomeSKU',
+                'QTY': 1,
+                'Open': True,
+                'Waypoints': [
+                    [pd.Timestamp('2023-01-19'), '3100', 'NA', '0000449493', '632', '2210OZS1496']
+                ],
+                'Unit_Value': 10,
+                'Brand': 'SomeBrand',
+                'Category': 'SomeCategory'
+            }
+        )
+        expected_item = ini_item.copy()
+        expected_item.Open = False
+        expected_item.Waypoints = [
+            [pd.NaT, '3100', 'NA', '0000449493', '', '2210OZS1496'],
+            [pd.Timestamp('2023-01-19'), '3100', '00209', np.nan, '632', '2210OZS1496'],
+            [pd.Timestamp('2023-01-19'), '3100', 'BURNT 00209', '0000000000', '311', '2210OZS1496']
+        ]
+        assert tracker._make_route(ini_item)[0].equals(expected_item)
+
+    @pytest.mark.parametrize(
+        'dummy_mvts', ['tests/test_data/fwt_case5.xlsx'], indirect=True
+    )
+    def test_case5_po(self, dummy_mvts):
+        tracker = ForwardTracker(WPT_DEF, dummy_mvts)
+        ini_item = pd.Series(
+            {
+                'First_Country': 'SomeCountry',
+                'SKU': 'SomeSKU',
+                'QTY': 1,
+                'Open': True,
+                'Waypoints': [
+                    [pd.Timestamp('2023-01-24'), '2200', 'NA', '0000385977', '632', '2305PXT6252']
+                ],
+                'Unit_Value': 10,
+                'Brand': 'SomeBrand',
+                'Category': 'SomeCategory'
+            }
+        )
+        expected_item = ini_item.copy()
+        expected_item.Waypoints = [
+            [pd.NaT, '2200', 'NA', '0000385977', '', '2305PXT6252'],
+            [pd.Timestamp('2023-01-24'), '2200', '00296', np.nan, '632', '2305PXT6252'],
+            [pd.Timestamp('2023-01-24'), '1100', '05507', np.nan, '161/673', '2305PXT6252']
+        ]
+        assert tracker._make_route(ini_item)[0].equals(expected_item)
+
+    @pytest.mark.parametrize(
+        'dummy_mvts', ['tests/test_data/fwt_case6.xlsx'], indirect=True
+    )
+    def test_case6_changebatch(self, dummy_mvts):
+        tracker = ForwardTracker(WPT_DEF, dummy_mvts)
+        ini_item = pd.Series(
+            {
+                'First_Country': 'SomeCountry',
+                'SKU': 'SomeSKU',
+                'QTY': 1,
+                'Open': True,
+                'Waypoints': [
+                    [pd.Timestamp('2022-12-28'), '2100', '00001', np.nan, 'SomeCode', '2001CZD4079']
+                ],
+                'Unit_Value': 10,
+                'Brand': 'SomeBrand',
+                'Category': 'SomeCategory'
+            }
+        )
+        expected_item = ini_item.copy()
+        expected_item.Waypoints.append(
+            [pd.Timestamp('2023-01-05'), '2100', '00001', np.nan, '702/701', '2001CZ00NEW']
+        )
+        assert tracker._make_route(ini_item)[0].equals(expected_item)
