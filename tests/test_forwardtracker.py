@@ -383,7 +383,7 @@ class Test_make_route:
         expected_item.Waypoints = [
             [pd.NaT, '2200', 'NA', '0000385977', '', '2305PXT6252'],
             [pd.Timestamp('2023-01-24'), '2200', '00296', np.nan, '632', '2305PXT6252'],
-            [pd.Timestamp('2023-01-24'), '1100', '05507', np.nan, '161/673', '2305PXT6252']
+            [pd.Timestamp('2023-01-25'), '1100', '05507', np.nan, '161/673', '2305PXT6252']
         ]
         assert tracker._make_route(ini_item)[0].equals(expected_item)
 
