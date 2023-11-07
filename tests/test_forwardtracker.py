@@ -390,7 +390,35 @@ class Test_make_route:
     @pytest.mark.parametrize(
         'dummy_mvts', ['tests/test_data/fwt_case6.xlsx'], indirect=True
     )
-    def test_case6_changebatch(self, dummy_mvts):
+    def test_case6_ponoreceipt(self, dummy_mvts):
+        tracker = ForwardTracker(WPT_DEF, dummy_mvts)
+        ini_item = pd.Series(
+            {
+                'First_Country': 'SomeCountry',
+                'SKU': 'SomeSKU',
+                'QTY': 1,
+                'Open': True,
+                'Waypoints': [
+                    [pd.Timestamp('2023-01-24'), '2200', 'NA', '0000385977', '632', '2305PXT6252']
+                ],
+                'Unit_Value': 10,
+                'Brand': 'SomeBrand',
+                'Category': 'SomeCategory'
+            }
+        )
+        expected_item = ini_item.copy()
+        expected_item.Open = np.nan
+        expected_item.Waypoints = [
+            [pd.NaT, '2200', 'NA', '0000385977', '', '2305PXT6252'],
+            [pd.Timestamp('2023-01-24'), '2200', '00296', np.nan, '632', '2305PXT6252'],
+            [pd.Timestamp('2023-01-24'), '2200', 'PO FROM 00296, mvt 161', '0000007905', '9000667710', '2305PXT6252']
+        ]
+        assert tracker._make_route(ini_item)[0].equals(expected_item)
+
+    @pytest.mark.parametrize(
+        'dummy_mvts', ['tests/test_data/fwt_case7.xlsx'], indirect=True
+    )
+    def test_case7_changebatch(self, dummy_mvts):
         tracker = ForwardTracker(WPT_DEF, dummy_mvts)
         ini_item = pd.Series(
             {
@@ -411,3 +439,32 @@ class Test_make_route:
             [pd.Timestamp('2023-01-05'), '2100', '00001', np.nan, '702/701', '2001CZ00NEW']
         )
         assert tracker._make_route(ini_item)[0].equals(expected_item)
+
+    @pytest.mark.parametrize(
+        'dummy_mvts', ['tests/test_data/fwt_case8.xlsx'], indirect=True
+    )
+    def test_case8_longroute(self, dummy_mvts):
+        tracker = ForwardTracker(WPT_DEF, dummy_mvts)
+        ini_item = pd.Series(
+            {
+                'First_Country': 'SomeCountry',
+                'SKU': 'SomeSKU',
+                'QTY': 1,
+                'Open': True,
+                'Waypoints': [
+                    [pd.Timestamp('2023-01-04'), '3400', 'NA', '0000397038', '932', '2204DKM3293']
+                ],
+                'Unit_Value': 10,
+                'Brand': 'SomeBrand',
+                'Category': 'SomeCategory'
+            }
+        )
+        expected_item = ini_item.copy()
+        expected_item.Waypoints = [
+            [pd.NaT, '3400', 'NA', '0000397038', '', '2204DKM3293'],
+            [pd.Timestamp('2023-01-04'), '3400', '00217', np.nan, '932', '2204DKM3293'],
+            [pd.Timestamp('2023-01-04'), '3400', '00209', np.nan, '321', '2204DKM3293'],
+            [pd.Timestamp('2023-01-18'), '3500', '00299', np.nan, '161/101', '2204DKM3293']
+        ]
+        assert tracker._make_route(ini_item)[0].equals(expected_item)
+
