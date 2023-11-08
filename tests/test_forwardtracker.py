@@ -239,6 +239,7 @@ class Test_find_incr:
         #FIXME: shouldn't take a +mvt coming from a PO! (row 4)
         assert list(increments.index) == [0, 4]
 
+
 @pytest.fixture()
 def dummy_mvts(request):
     profile_name = 'test_profile_scheduler3'
@@ -464,7 +465,39 @@ class Test_make_route:
             [pd.NaT, '3400', 'NA', '0000397038', '', '2204DKM3293'],
             [pd.Timestamp('2023-01-04'), '3400', '00217', np.nan, '932', '2204DKM3293'],
             [pd.Timestamp('2023-01-04'), '3400', '00209', np.nan, '321', '2204DKM3293'],
-            [pd.Timestamp('2023-01-18'), '3500', '00299', np.nan, '161/101', '2204DKM3293']
+            [pd.Timestamp('2023-01-18'), '3500', '00299', np.nan, '161/101', '2204DKM3293'],
+            [pd.Timestamp('2023-01-18'), '3500', '00204', np.nan, '321', '2204DKM3293'],
+            [pd.Timestamp('2023-01-20'), '3500', '002Q3', np.nan, '311', '2204DKM3293'],
+            [pd.Timestamp('2023-01-23'), '3500', '002Q2', np.nan, '321', '2204DKM3293'],
         ]
         assert tracker._make_route(ini_item)[0].equals(expected_item)
 
+    @pytest.mark.parametrize(
+        'dummy_mvts', ['tests/test_data/fwt_case9.xlsx'], indirect=True
+    )
+    def test_case9_repassentrypoint(self, dummy_mvts):
+        tracker = ForwardTracker(WPT_DEF, dummy_mvts)
+        ini_item = pd.Series(
+            {
+                'First_Country': 'SomeCountry',
+                'SKU': 'SomeSKU',
+                'QTY': 1,
+                'Open': True,
+                'Waypoints': [
+                    [pd.Timestamp('2023-01-16'), '1000', 'NA', '0000329283', '632', '2102ZXH2048']
+                ],
+                'Unit_Value': 10,
+                'Brand': 'SomeBrand',
+                'Category': 'SomeCategory'
+            }
+        )
+        expected_item = ini_item.copy()
+        expected_item.Waypoints = [
+            [pd.NaT, '1000', 'NA', '0000329283', '', '2102ZXH2048'],
+            [pd.Timestamp('2023-01-16'), '1000', '00207', np.nan, '632', '2102ZXH2048'],
+            [pd.Timestamp('2023-01-17'), '1000', '00213', np.nan, '311', '2102ZXH2048'],
+            [pd.Timestamp('2023-01-19'), '1000', 'NA', '0000323040', '631', '2102ZXH2048'],
+            [pd.Timestamp('2023-01-23'), '1000', '00209', np.nan, '632', '2102ZXH2048'],
+            [pd.Timestamp('2023-01-26'), '1000', '00202', np.nan, '311', '2102ZXH2048'],
+        ]
+        assert tracker._make_route(ini_item)[0].equals(expected_item)
