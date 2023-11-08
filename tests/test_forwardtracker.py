@@ -254,9 +254,9 @@ def dummy_mvts(request):
 
 class Test_make_route:
     @pytest.mark.parametrize(
-        'dummy_mvts', ['tests/test_data/fwt_case1.xlsx'], indirect=True
+        'dummy_mvts', ['tests/test_data/fwt_case01.xlsx'], indirect=True
     )
-    def test_case1_simpletransfer(self, dummy_mvts):  # DC = DecrementIncrement
+    def test_case01_simpletransfer(self, dummy_mvts):  # DC = DecrementIncrement
         tracker = ForwardTracker(WPT_DEF, dummy_mvts)
         ini_item = pd.Series(
             {
@@ -280,9 +280,9 @@ class Test_make_route:
         assert tracker._make_route(ini_item)[0].equals(expected_item)
 
     @pytest.mark.parametrize(
-        'dummy_mvts', ['tests/test_data/fwt_case2.xlsx'], indirect=True
+        'dummy_mvts', ['tests/test_data/fwt_case02.xlsx'], indirect=True
     )
-    def test_case2_2transfers(self, dummy_mvts):
+    def test_case02_2transfers(self, dummy_mvts):
         tracker = ForwardTracker(WPT_DEF, dummy_mvts)
         ini_item = pd.Series(
             {
@@ -307,9 +307,9 @@ class Test_make_route:
         assert tracker._make_route(ini_item)[0].equals(expected_item)
 
     @pytest.mark.parametrize(
-        'dummy_mvts', ['tests/test_data/fwt_case3.xlsx'], indirect=True
+        'dummy_mvts', ['tests/test_data/fwt_case03.xlsx'], indirect=True
     )
-    def test_case3_incrementotherbatch(self, dummy_mvts):
+    def test_case03_incrementotherbatch(self, dummy_mvts):
         tracker = ForwardTracker(WPT_DEF, dummy_mvts)
         ini_item = pd.Series(
             {
@@ -334,9 +334,9 @@ class Test_make_route:
         assert tracker._make_route(ini_item)[0].equals(expected_item)
 
     @pytest.mark.parametrize(
-        'dummy_mvts', ['tests/test_data/fwt_case4.xlsx'], indirect=True
+        'dummy_mvts', ['tests/test_data/fwt_case04.xlsx'], indirect=True
     )
-    def test_case4_burnt(self, dummy_mvts):
+    def test_case04_burnt(self, dummy_mvts):
         tracker = ForwardTracker(WPT_DEF, dummy_mvts)
         ini_item = pd.Series(
             {
@@ -362,9 +362,9 @@ class Test_make_route:
         assert tracker._make_route(ini_item)[0].equals(expected_item)
 
     @pytest.mark.parametrize(
-        'dummy_mvts', ['tests/test_data/fwt_case5.xlsx'], indirect=True
+        'dummy_mvts', ['tests/test_data/fwt_case05.xlsx'], indirect=True
     )
-    def test_case5_po(self, dummy_mvts):
+    def test_case05_po(self, dummy_mvts):
         tracker = ForwardTracker(WPT_DEF, dummy_mvts)
         ini_item = pd.Series(
             {
@@ -389,9 +389,9 @@ class Test_make_route:
         assert tracker._make_route(ini_item)[0].equals(expected_item)
 
     @pytest.mark.parametrize(
-        'dummy_mvts', ['tests/test_data/fwt_case6.xlsx'], indirect=True
+        'dummy_mvts', ['tests/test_data/fwt_case06.xlsx'], indirect=True
     )
-    def test_case6_ponoreceipt(self, dummy_mvts):
+    def test_case06_ponoreceipt(self, dummy_mvts):
         tracker = ForwardTracker(WPT_DEF, dummy_mvts)
         ini_item = pd.Series(
             {
@@ -417,9 +417,9 @@ class Test_make_route:
         assert tracker._make_route(ini_item)[0].equals(expected_item)
 
     @pytest.mark.parametrize(
-        'dummy_mvts', ['tests/test_data/fwt_case7.xlsx'], indirect=True
+        'dummy_mvts', ['tests/test_data/fwt_case07.xlsx'], indirect=True
     )
-    def test_case7_changebatch(self, dummy_mvts):
+    def test_case07_changebatch(self, dummy_mvts):
         tracker = ForwardTracker(WPT_DEF, dummy_mvts)
         ini_item = pd.Series(
             {
@@ -442,9 +442,9 @@ class Test_make_route:
         assert tracker._make_route(ini_item)[0].equals(expected_item)
 
     @pytest.mark.parametrize(
-        'dummy_mvts', ['tests/test_data/fwt_case8.xlsx'], indirect=True
+        'dummy_mvts', ['tests/test_data/fwt_case08.xlsx'], indirect=True
     )
-    def test_case8_longroute(self, dummy_mvts):
+    def test_case08_longroute(self, dummy_mvts):
         tracker = ForwardTracker(WPT_DEF, dummy_mvts)
         ini_item = pd.Series(
             {
@@ -473,9 +473,9 @@ class Test_make_route:
         assert tracker._make_route(ini_item)[0].equals(expected_item)
 
     @pytest.mark.parametrize(
-        'dummy_mvts', ['tests/test_data/fwt_case9.xlsx'], indirect=True
+        'dummy_mvts', ['tests/test_data/fwt_case09.xlsx'], indirect=True
     )
-    def test_case9_repassentrypoint(self, dummy_mvts):
+    def test_case09_repassentrypoint(self, dummy_mvts):
         tracker = ForwardTracker(WPT_DEF, dummy_mvts)
         ini_item = pd.Series(
             {
@@ -501,3 +501,45 @@ class Test_make_route:
             [pd.Timestamp('2023-01-26'), '1000', '00202', np.nan, '311', '2102ZXH2048'],
         ]
         assert tracker._make_route(ini_item)[0].equals(expected_item)
+
+    @pytest.mark.parametrize(
+        'dummy_mvts', ['tests/test_data/fwt_case10.xlsx'], indirect=True
+    )
+    def test_case10_split_1decr2incr(self, dummy_mvts):
+        tracker = ForwardTracker(WPT_DEF, dummy_mvts)
+        ini_item = pd.Series(
+            {
+                'First_Country': 'SomeCountry',
+                'SKU': 'SomeSKU',
+                'QTY': 4,
+                'Open': True,
+                'Waypoints': [
+                    [pd.NaT, '3500', 'NA', '0000111111', '', '2002FON6440'],
+                    [pd.Timestamp('2023-01-03'), '1100', '1000', 'NA', '632', '2204NOM8139']
+                ],
+                'Unit_Value': 10,
+                'Brand': 'SomeBrand',
+                'Category': 'SomeCategory'
+            },
+            name='_some_ID'
+        )
+        out_items = tracker._make_route(ini_item)
+        exp_item = [ini_item.copy(), ini_item.copy()]
+        exp_item[0].name = ini_item.name+'.0'
+        exp_item[0].QTY = 3
+        exp_item[0].Waypoints = [
+            [pd.NaT, '3500', 'NA', '0000111111', '', '2002FON6440'],
+            [pd.Timestamp('2023-01-03'), '1100', '1000', 'NA', '632', '2204NOM8139'],
+            [pd.Timestamp('2023-01-03'), '1100', '00204', np.nan, '311', '2204NOM8139']
+        ]
+        exp_item[1].name = ini_item.name+'.1'
+        exp_item[1].QTY = 1
+        exp_item[1].Waypoints = [
+            [pd.NaT, '3500', 'NA', '0000111111', '', '2002FON6440'],
+            [pd.Timestamp('2023-01-03'), '1100', '1000', 'NA', '632', '2204NOM8139'],
+            [pd.Timestamp('2023-01-03'), '1100', 'Y05', np.nan, '311', '2204NOM8139']
+        ]
+        assert (
+            out_items[0].equals(exp_item[0])
+            and out_items[1].equals(exp_item[1])
+        )
