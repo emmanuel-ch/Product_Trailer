@@ -15,6 +15,7 @@ import pandas as pd
 import tqdm
 
 from product_trailer.forwardtracker import ForwardTracker
+from product_trailer.item import Item
 
 
 class Scheduler:
@@ -27,6 +28,9 @@ class Scheduler:
         items, num_retrieved = self._prep_item(new_raw_data)
         self.items_todo = items.loc[items['Open'].fillna(True)].copy()
         self.items_done = [items.loc[~items['Open'].fillna(True)].copy()]
+        
+        self._make_todo_dict()
+
         self.tasklist = self._make_tasklist()
         self.mvts = self._prep_mvt(new_raw_data)
         self.mvts_done = []
@@ -78,6 +82,14 @@ class Scheduler:
             return tracked_items, saved_items.shape[0]
         return new_tracked_items, 0
     
+    def _make_todo_dict(self):
+        self.todo_dict = {}
+        self.items_todo.groupby('SKU', observed=True).apply(self._todo_add)
+    
+    def _todo_add(self, df):
+        items = [Item(*row) for row in df.reset_index().to_numpy()]
+        self.todo_dict[df.name] = items
+
     def _make_tasklist(self):
         return (
             self.items_todo

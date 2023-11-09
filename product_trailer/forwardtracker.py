@@ -12,9 +12,12 @@ Class ForwardTracker - methods:
     ._find_incr
 """
 
+from copy import deepcopy
 
 import numpy as np
 import pandas as pd
+
+from product_trailer.item import Item
 
 
 class ForwardTracker():
@@ -39,13 +42,13 @@ class ForwardTracker():
         df_items_computed = pd.DataFrame(items_computed)
         return df_items_computed, self.mvts
 
-
-    def _make_route(self, item: pd.Series) -> list[pd.Series]:
+    
+    def _make_route(self, item: Item) -> list[Item]:
         new_items = self._make_hop(item)
         if len(new_items) == 0:
             return []
         elif len(new_items) == 1:
-            if item.equals(new_items[0]):  # Product didn't travel further
+            if item == new_items[0]:  # Product didn't travel further
                 return [item]
         return [
             an_item
@@ -54,26 +57,26 @@ class ForwardTracker():
         ]
     
     
-    def _make_hop(self, item: pd.Series) -> list:
-        first_step = len(item['Waypoints']) == 1
+    def _make_hop(self, item: Item) -> list:
+        first_step = len(item.waypoints) == 1
 
-        if not np.isnan(item['Open']):
+        if not np.isnan(item.open):
             minus_mvts = self._find_decr(
-                first_step, item['Waypoints'][-1],
-                item.name
+                first_step, item.waypoints[-1],
+                item.id
                 )
         else:
             minus_mvts = pd.DataFrame(
                 {
-                    'Posting Date': [item['Waypoints'][-1][0]],
-                    'Batch': [item['Waypoints'][-1][5]],
-                    'PO': [item['Waypoints'][-1][4]],
+                    'Posting Date': [item.waypoints[-1][0]],
+                    'Batch': [item.waypoints[-1][5]],
+                    'PO': [item.waypoints[-1][4]],
                     'Mvt Code': ['PO'],
-                    'Company': [item['Waypoints'][-1][1]], 
-                    'SLOC': [item['Waypoints'][-1][2]], 
-                    'Sold to': [item['Waypoints'][-1][3]],
+                    'Company': [item.waypoints[-1][1]], 
+                    'SLOC': [item.waypoints[-1][2]], 
+                    'Sold to': [item.waypoints[-1][3]],
                     'QTY': [-item['QTY']],
-                    'QTY_Unallocated': [item['QTY']],
+                    'QTY_Unallocated': [item.qty],
                     'Items_Allocated': [set()]
                 }
             )
@@ -89,15 +92,15 @@ class ForwardTracker():
             return [item]
         
         new_items = []
-        multiple_minuses = -minus_mvts.iloc[0]['QTY'] < item['QTY']
+        multiple_minuses = -minus_mvts.iloc[0]['QTY'] < item.qty
         sub_ID_lv1 = 0
         QTY_covered = 0
 
         for minus_idx, minus_mvt in minus_mvts.iterrows():
             # Positive int:
-            hop_minus_QTY = min(item['QTY'] - QTY_covered, -minus_mvt['QTY'])
+            hop_minus_QTY = min(item.qty - QTY_covered, -minus_mvt['QTY'])
             plus_resolved = self._compute_incr(
-                minus_mvt, hop_minus_QTY, item.name
+                minus_mvt, hop_minus_QTY, item.id
             )
 
             for sub_ID_2, this_plus_resolved in enumerate(plus_resolved):
@@ -120,45 +123,45 @@ class ForwardTracker():
 
             if minus_mvt['Mvt Code'] != 'PO':
                 self.mvts.loc[minus_idx, 'QTY_Unallocated'] -= hop_minus_QTY
-                self.mvts.loc[minus_idx, 'Items_Allocated'].add(item.name)
+                self.mvts.loc[minus_idx, 'Items_Allocated'].add(item.id)
             
             
             QTY_covered += hop_minus_QTY
-            if QTY_covered == item['QTY']:
+            if QTY_covered == item.qty:
                 break
-            elif QTY_covered > item['QTY']:
+            elif QTY_covered > item.qty:
                 raise Exception((f'Over-cover! Covered {QTY_covered} [-]',
-                                f' for item qty {item["QTY"]}'))
+                                f' for item qty {item.qty}'))
             sub_ID_lv1 += 1
         
-        if QTY_covered < item['QTY']:
+        if QTY_covered < item.qty:
             new_items.append(
                 self._build_item(
                     item,
                     instruction='LastMinusNeeds_subID',
-                    data = {'qty': item['QTY'] - QTY_covered},
+                    data = {'qty': item.qty - QTY_covered},
                     sub_ID=str(sub_ID_lv1)
                 )
             )
         return new_items
 
-
+    
     def _build_item(
-        self, item: pd.Series, instruction: str, data: dict, sub_ID: bool | str
-    ) -> pd.Series:
-        new_item = item.copy(deep=True)
-        new_item['Waypoints'] = item['Waypoints'].copy()  # Lists are mutable
+        self, item: Item, instruction: str, data: dict, sub_ID: bool | str
+    ) -> Item:
+        new_item = deepcopy(item)
+        # new_item['Waypoints'] = item['Waypoints'].copy()  # Lists are mutable
         # Note the waypoints themselves still link to the same memory space.
         # copy.deepcopy() would solve this, if this was an issue.
 
         if instruction == 'LastMinusNeeds_subID':
-            new_item['QTY'] = data['qty']
-            new_item.name = new_item.name + '.' + sub_ID
+            new_item.qty = data['qty']
+            new_item.id = new_item.id + '.' + sub_ID
             return new_item
         
         if isinstance(data['plus_mvt'], str):  # instruction == 'standard'
             if data['plus_mvt'] == 'BURNT':
-                new_item['Open'] = False
+                new_item.open = False
                 new_wpt = list(data['minus_mvt'][self.defwpt])
                 new_wpt[2] = f"BURNT {data['minus_mvt']['SLOC']}"
             elif data['plus_mvt'] == 'PO2ndPartMissing':
@@ -166,7 +169,7 @@ class ForwardTracker():
                     # Don't add a waypoint if we haven't found 2nd part of 
                     # the PO for 2+ times in a row
                     return new_item
-                new_item['Open'] = np.nan
+                new_item.open = np.nan
                 new_wpt = list(data['minus_mvt'][self.defwpt])
                 new_wpt[2] = 'PO FROM %s, mvt %s' % (
                     data['minus_mvt']['SLOC'],
@@ -176,24 +179,24 @@ class ForwardTracker():
             else:
                 raise Exception('Unexpected [+] mvt resolution type')
         else:
-            if len(new_item.Waypoints) == 1:
-                new_item['Waypoints'][0][0] = pd.NaT
-                new_item['Waypoints'][0][4] = ''
+            if len(new_item.waypoints) == 1:
+                new_item.waypoints[0][0] = pd.NaT
+                new_item.waypoints[0][4] = ''
             
-            new_item['Open'] = True
+            new_item.open = True
             new_wpt = list(data['plus_mvt'].loc[self.defwpt])
             if new_wpt[2] != 'NA': # Remove SoldTo if SLOC isn't a Consignment
                 new_wpt[3] = np.nan
             if data['minus_mvt']['Mvt Code'] != new_wpt[4]: # Combination
                 new_wpt[4] = data['minus_mvt']['Mvt Code'] + '/' + new_wpt[4]
 
-        new_item['Waypoints'].append(new_wpt)
-        new_item['QTY'] = data['qty']
+        new_item.waypoints.append(new_wpt)
+        new_item.qty = data['qty']
         if sub_ID:
-            new_item.name = new_item.name + '.' + sub_ID
+            new_item.id = new_item.id + '.' + sub_ID
         return new_item
 
-
+    
     def _compute_incr(
         self,
         minus_mvt: pd.Series,
@@ -234,7 +237,7 @@ class ForwardTracker():
         
         return plus_resolved
 
-
+    
     def _find_decr(
         self, first_step: bool, wpt: list, ID: str
     ) -> pd.DataFrame:
@@ -277,7 +280,7 @@ class ForwardTracker():
             ]
         return decrement
     
-
+    
     def _find_incr(
         self, decr: pd.Series, nobatch: bool = False
     ) -> pd.DataFrame:

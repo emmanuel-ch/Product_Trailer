@@ -3,6 +3,8 @@ Defines class UserData: Handles user-data file.
 
 Class UserData - methods:
     .__init__
+    .fetch
+    .set
 """
 
 
