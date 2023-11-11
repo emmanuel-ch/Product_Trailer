@@ -25,9 +25,11 @@ class ForwardTracker():
         self,
         defwpt: list[str],
         task_mvts: pd.DataFrame,
+        save_mvts: bool
     ) -> None:
         self.mvts = task_mvts
         self.defwpt = defwpt
+        self.save_mvts = save_mvts
     
     
     def do_task(self, task_items: list[Item]) -> (list[Item], pd.DataFrame):
@@ -37,8 +39,9 @@ class ForwardTracker():
         items_computed = []
         for item in task_items:
             items_computed.extend(self._make_route(item))
-        # IMPROVE: Don't return self.mvts if not needed
-        return items_computed, self.mvts
+        if self.save_mvts:
+            return items_computed, self.mvts
+        return items_computed, None
 
     
     def _make_route(self, item: Item) -> list[Item]:

@@ -59,7 +59,8 @@ class Scheduler:
             add_items, add_mvts = (
                 ForwardTracker(
                     Scheduler.DEF_WPT,
-                    self.mvts.loc[(self.mvts['SKU'] == task)]
+                    self.mvts.loc[(self.mvts['SKU'] == task)],
+                    self.profile.db_config['save_movements']
                 )
                 .do_task(self.todo_dict[task])
             )
