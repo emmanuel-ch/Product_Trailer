@@ -4,13 +4,10 @@ Called upon starting program.
 """
 
 import argparse
-
+from product_trailer.scheduler import Scheduler
+from product_trailer.profile import Profile
 
 def main() -> None:
-    from product_trailer.scheduler import Scheduler
-    from product_trailer.profile import Profile
-
-    # Arg parser
     parser = argparse.ArgumentParser(
         description = (
             'Tracking products through supply-chain network',
