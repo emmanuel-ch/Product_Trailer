@@ -35,7 +35,7 @@ def import_movements(filepath: str) -> pd.DataFrame:
         'Category': 'category',
         'Material': 'category',
         'Batch No': str,
-        'QTY': 'int16',
+        'QTY': 'float',
         'Standard Price': 'float32',
     }
     renaming_dict = {
@@ -82,6 +82,10 @@ def import_movements(filepath: str) -> pd.DataFrame:
         .rename(columns=renaming_dict)
         .pipe(lambda df: df.loc[df['Material Type Code'] == 'FERT'])
         .sort_values(by=['Posting Date', 'QTY'], ascending=[True, False])
+        .assign(QTY = lambda df: pd.to_numeric(
+            df['QTY'], errors='coerce', downcast='integer'
+        ))
+        .dropna(subset='QTY')
     )
 
     for col_name in ['Special Stock Ind Code', 'SLOC']:
