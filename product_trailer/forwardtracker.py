@@ -113,13 +113,15 @@ class ForwardTracker():
                     sub_ID = str(sub_ID_2) if (len(plus_resolved) > 1) else False
 
                 new_item = self._build_item(
-                    item, instruction = 'standard',
+                    item,
+                    instruction = 'standard',
                     data = {
                         'minus_mvt': minus_mvt,
                         'qty': this_plus_resolved['qty'],
                         'plus_mvt': this_plus_resolved['plus_mvt']
                     },
-                    sub_ID=sub_ID)
+                    sub_ID=sub_ID
+                )
                 new_items.append(new_item)
 
             if minus_mvt['Mvt Code'] != 'PO':
@@ -157,7 +159,7 @@ class ForwardTracker():
 
         if instruction == 'LastMinusNeeds_subID':
             new_item.qty = data['qty']
-            new_item.id = new_item.id + '.' + sub_ID
+            new_item.id += '.' + sub_ID
             return new_item
         
         if isinstance(data['plus_mvt'], str):  # instruction == 'standard'
