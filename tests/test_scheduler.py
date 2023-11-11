@@ -28,23 +28,23 @@ class Test_extract_items:
         assert len(dummy_extract) == 8
 
     def test__extract_items_totalqty(self, dummy_extract):
-        assert dummy_extract['QTY'].sum() == 12
+        assert dummy_extract['qty'].sum() == 12
 
     def test__extract_items_noduplicates(self, dummy_extract):
         assert not any(dummy_extract.index.duplicated())
 
     def test__extract_items_positiveqty(self, dummy_extract):
-        assert all(dummy_extract['QTY'] > 0)
+        assert all(dummy_extract['qty'] > 0)
 
     def test__extract_items_dtypes(self, dummy_extract):
         assert (
             (
                 list(dummy_extract.select_dtypes('category').columns)
-                == ['First_Country', 'SKU', 'Brand', 'Category']
+                == ['ini_country', 'sku', 'brand', 'category']
             )
-            and (list(dummy_extract.select_dtypes('number').columns) == ['QTY', 'Unit_Value'])
-            and (list(dummy_extract.select_dtypes(bool).columns) == ['Open'])
-            and (list(dummy_extract.select_dtypes('object').columns) == ['Waypoints'])
+            and (list(dummy_extract.select_dtypes('number').columns) == ['qty', 'unit_value'])
+            and (list(dummy_extract.select_dtypes(bool).columns) == ['open'])
+            and (list(dummy_extract.select_dtypes('object').columns) == ['waypoints'])
         )
 
 

@@ -9,6 +9,7 @@ Functions:
 from pathlib import Path
 from xlsx2csv import Xlsx2csv
 from io import StringIO
+import numpy as np
 import pandas as pd
 
 
@@ -77,14 +78,18 @@ def import_movements(filepath: str) -> pd.DataFrame:
         case _:
             raise Exception('File type not supported')
 
+    def nonint_naner(val):
+        conv = int(val)
+        if conv == val:
+            return conv
+        return np.nan
+
     raw_mvt = (
         raw_mvt
         .rename(columns=renaming_dict)
         .pipe(lambda df: df.loc[df['Material Type Code'] == 'FERT'])
         .sort_values(by=['Posting Date', 'QTY'], ascending=[True, False])
-        .assign(QTY = lambda df: pd.to_numeric(
-            df['QTY'], errors='coerce', downcast='integer'
-        ))
+        .assign(QTY = lambda df: df['QTY'].apply(nonint_naner))
         .dropna(subset='QTY')
     )
 
