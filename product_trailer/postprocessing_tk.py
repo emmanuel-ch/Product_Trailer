@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 
 def make_standard_report(tracked_items: pd.DataFrame) -> pd.DataFrame:
     def make_features(item):
-        wpts = item['Waypoints']
+        wpts = item['waypoints']
         list_companies = [i[0] for i in groupby(np.array(wpts)[:,1])]
         return {
             'Route': ' > '.join(list(map('.'.join, np.array(wpts)[:, 1:3]))),
@@ -37,15 +37,15 @@ def make_standard_report(tracked_items: pd.DataFrame) -> pd.DataFrame:
             'Num_Steps': len(wpts),
             'Num_Companies': len(list_companies)
         }
-    new_cols = tracked_items[['Waypoints']].apply(make_features,
+    new_cols = tracked_items[['waypoints']].apply(make_features,
                                                   axis=1, result_type='expand')
     ti = pd.concat([tracked_items, new_cols], axis='columns')
 
-    item_max_date = max(ti['Waypoints'].apply(lambda wpts: np.array(wpts)[-1,0]))
+    item_max_date = max(ti['waypoints'].apply(lambda wpts: np.array(wpts)[-1,0]))
     ti['Num_Days_Open'] = np.where(
-        ti['Open'].fillna(False),
+        ti['open'].fillna(False),
         item_max_date - ti['Return_Date'],
-        ti['Waypoints'].apply(lambda wpts: wpts[-1][0]) - ti['Return_Date']
+        ti['waypoints'].apply(lambda wpts: wpts[-1][0]) - ti['Return_Date']
     )
 
     # Formating
@@ -59,23 +59,23 @@ def make_standard_report(tracked_items: pd.DataFrame) -> pd.DataFrame:
                 wpts[1:]
                 ))
             )
-    ti['Waypoints'] = ti['Waypoints'].apply(lambda wpts: decorate_wpts(wpts))
+    ti['waypoints'] = ti['waypoints'].apply(lambda wpts: decorate_wpts(wpts))
     return ti.reset_index()
 
 
 def make_exportable_hist(tracked_Items: pd.DataFrame) -> pd.DataFrame:
     tobe_rtn = (
         tracked_Items
-        .explode('Waypoints')
-        .reset_index(names='ID')
-        .assign(WaypointNo = lambda df_: 1+df_.groupby('ID').cumcount(),
-                Landing_Date = lambda df_: df_['Waypoints'].apply(lambda row: row[0]),
-                Landing_Code = lambda df_: df_['Waypoints'].apply(lambda row: row[3]),
-                SLOC = lambda df_: df_['Waypoints'].apply(lambda row: row[1]),
-                Soldto = lambda df_: df_['Waypoints'].apply(lambda row: row[2]),
-                Batch_ = lambda df_: df_['Waypoints'].apply(lambda row: row[4]),
-                Depart_Date = lambda df_: df_.groupby('ID')['Landing_Date'].shift(-1))
-        .drop(columns=['Waypoints'])
+        .explode('waypoints')
+        .reset_index(names='id')
+        .assign(WaypointNo = lambda df_: 1+df_.groupby('id').cumcount(),
+                Landing_Date = lambda df_: df_['waypoints'].apply(lambda row: row[0]),
+                Landing_Code = lambda df_: df_['waypoints'].apply(lambda row: row[3]),
+                SLOC = lambda df_: df_['waypoints'].apply(lambda row: row[1]),
+                Soldto = lambda df_: df_['waypoints'].apply(lambda row: row[2]),
+                Batch_ = lambda df_: df_['waypoints'].apply(lambda row: row[4]),
+                Depart_Date = lambda df_: df_.groupby('id')['Landing_Date'].shift(-1))
+        .drop(columns=['waypoints'])
     )
     tobe_rtn['Landing_Date'] = tobe_rtn.apply(
         lambda row: np.nan if row['WaypointNo']==1 else row['Landing_Date'],
@@ -97,14 +97,13 @@ def collect_stock_move(df: pd.DataFrame, node_level: str) -> dict:
     node_name = functools.partial(node_name, node_level=node_level)
 
     def assign_move(series):
-        qty = series['QTY']
-        wpts = series['Waypoints']
+        qty = series['qty']
+        wpts = series['waypoints']
         
         for i, wpt in enumerate(wpts):
             if i == 0:
                 continue
-            node_from = node_name(wpts[i-1])
-            node_to = node_name(wpt)
+            node_from, node_to = node_name(wpts[i-1]), node_name(wpt)
             if node_from != node_to:
                 move_name = node_from + '-' + node_to
                 if move_name in stock_move.keys():

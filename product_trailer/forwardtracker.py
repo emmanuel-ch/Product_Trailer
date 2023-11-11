@@ -30,17 +30,15 @@ class ForwardTracker():
         self.defwpt = defwpt
     
     
-    def do_task(
-        self,
-        task_items: pd.DataFrame,
-    ) -> (pd.DataFrame, pd.DataFrame):
+    def do_task(self, task_items: list[Item]) -> (list[Item], pd.DataFrame):
         if len(self.mvts) == 0:  # No mvt => Skip this
             return task_items, self.mvts
-        items_computed = []  # list of pd.Series
-        for _, item in task_items.iterrows():
+        
+        items_computed = []
+        for item in task_items:
             items_computed.extend(self._make_route(item))
-        df_items_computed = pd.DataFrame(items_computed)
-        return df_items_computed, self.mvts
+        # IMPROVE: Don't return self.mvts if not needed
+        return items_computed, self.mvts
 
     
     def _make_route(self, item: Item) -> list[Item]:
@@ -75,7 +73,7 @@ class ForwardTracker():
                     'Company': [item.waypoints[-1][1]], 
                     'SLOC': [item.waypoints[-1][2]], 
                     'Sold to': [item.waypoints[-1][3]],
-                    'QTY': [-item['QTY']],
+                    'QTY': [-item.qty],
                     'QTY_Unallocated': [item.qty],
                     'Items_Allocated': [set()]
                 }

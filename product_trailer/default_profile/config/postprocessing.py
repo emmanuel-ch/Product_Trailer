@@ -22,7 +22,7 @@ def postprocess(self, tracked_items: pd.DataFrame) -> bool:
     detailed_view = pp_tk.make_exportable_hist(tracked_items)
 
     stock_move = pp_tk.collect_stock_move(
-        tracked_items[['QTY', 'Waypoints']],
+        tracked_items[['qty', 'waypoints']],
         'company'
         )
     fig = pp_tk.generate_stock_move_diagram(stock_move)
@@ -44,7 +44,7 @@ def postprocess(self, tracked_items: pd.DataFrame) -> bool:
 
 def customize_std_report(tracked_Items: pd.DataFrame) -> pd.DataFrame:
     TI = tracked_Items.copy(deep=True)
-    TI['Num_Returns_Cngmt'] = TI['Waypoints'].apply(
+    TI['Num_Returns_Cngmt'] = TI['waypoints'].apply(
         lambda wpts: np.count_nonzero(np.isin(
             np.array(wpts).flatten(),
             ['632', '932', '956/955']

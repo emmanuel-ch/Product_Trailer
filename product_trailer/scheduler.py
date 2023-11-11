@@ -26,12 +26,12 @@ class Scheduler:
     
     def prepare(self, new_raw_data):
         items, num_retrieved = self._prep_item(new_raw_data)
-        self.items_todo = items.loc[items['Open'].fillna(True)].copy()
-        self.items_done = [items.loc[~items['Open'].fillna(True)].copy()]
+        self.items_todo = items.loc[items['open'].fillna(True)].copy()
+        self.items_done = [items.loc[~items['open'].fillna(True)].copy()]
         
         self._make_todo_dict()
+        self.tasklist = list(self.todo_dict.keys())
 
-        self.tasklist = self._make_tasklist()
         self.mvts = self._prep_mvt(new_raw_data)
         self.mvts_done = []
 
@@ -53,6 +53,7 @@ class Scheduler:
 
     
     def run(self):
+        items_computed = []
         for task in (pbar := tqdm.tqdm(self.tasklist, desc='Crunching...')):
             pbar.set_postfix({'Object': task}, refresh=False)
             add_items, add_mvts = (
@@ -60,13 +61,19 @@ class Scheduler:
                     Scheduler.DEF_WPT,
                     self.mvts.loc[(self.mvts['SKU'] == task)]
                 )
-                .do_task(self.items_todo.loc[(self.items_todo['SKU'] == task)])
+                .do_task(self.todo_dict[task])
             )
-            self.items_done.append(add_items)
+            items_computed.extend(add_items)
             if self.profile.db_config['save_movements']:
                 self.mvts_done.append(add_mvts)
         
-        all_items = pd.concat(self.items_done, axis=0)
+        df_computed_items = pd.DataFrame.from_dict(
+            {item.id: item.to_tuple() for item in items_computed},
+            orient='index',
+            columns=Item.__slots__[1:]
+        )
+
+        all_items = pd.concat(self.items_done + [df_computed_items], axis=0)
         return all_items, self.mvts_done
     
 
@@ -84,20 +91,11 @@ class Scheduler:
     
     def _make_todo_dict(self):
         self.todo_dict = {}
-        self.items_todo.groupby('SKU', observed=True).apply(self._todo_add)
+        self.items_todo.groupby('sku', observed=True).apply(self._todo_add)
     
     def _todo_add(self, df):
         items = [Item(*row) for row in df.reset_index().to_numpy()]
         self.todo_dict[df.name] = items
-
-    def _make_tasklist(self):
-        return (
-            self.items_todo
-            .value_counts(['SKU'])
-            .loc[self.items_todo.value_counts(['SKU']).gt(0)]
-            .reset_index()['SKU']
-            .to_list()
-        )
     
     def _prep_mvt(self, new_raw_mvt: pd.DataFrame) -> pd.DataFrame:
         return (
@@ -171,17 +169,27 @@ class Scheduler:
                     axis=1
                     )
             )
-            .rename(columns={'Country': 'First_Country'})
+            .rename(columns={
+                'ID': 'id',
+                'Country': 'ini_country',
+                'SKU': 'sku',
+                'QTY': 'qty',
+                'Open': 'open',
+                'Waypoints': 'waypoints',
+                'Unit_Value': 'unit_value',
+                'Brand': 'brand',
+                'Category': 'category'
+            })
             [
                 [
-                   'First_Country',
-                   'SKU',
-                   'QTY',
-                   'Open',
-                   'Waypoints',
-                   'Unit_Value',
-                   'Brand',
-                   'Category'
+                   'ini_country',
+                   'sku',
+                   'qty',
+                   'open',
+                   'waypoints',
+                   'unit_value',
+                   'brand',
+                   'category'
                 ]
             ]
         )

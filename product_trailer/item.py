@@ -18,3 +18,15 @@ class Item:
     unit_value: float
     brand: str
     category: str
+
+    def to_tuple(self):
+        return (
+            self.ini_country,
+            self.sku,
+            self.qty,
+            self.open,
+            self.waypoints,
+            self.unit_value,
+            self.brand,
+            self.category
+        )
